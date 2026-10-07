@@ -47,7 +47,7 @@ def summarize(directory: Path) -> str:
             f"{test['emergency_recall']:.4f}",
             f"{test['under_triage_rate']:.4f}",
             f"{test['critical_under_triage_rate']:.4f}",
-            record["git_commit"][:12],
+            _short_commit(record["git_commit"]),
         )
         lines.append("| " + " | ".join(str(cell) for cell in cells) + " |")
     return "\n".join(lines)
