@@ -1,228 +1,327 @@
 # Health-flow
 
-Health-flow é um assistente inteligente de navegação em saúde para orientar cidadãos entre SUS e saúde suplementar.
+Projeto acadêmico de Inteligência Artificial para navegação assistencial no SUS e, em etapas posteriores, consulta de medicamentos e cobertura de planos de saúde.
 
-A proposta é receber a necessidade do usuário em linguagem natural, entender o contexto, aplicar regras de segurança e usar um **Agent Harness** para coordenar consultas a serviços de saúde, medicamentos, planos, prontuário autorizado e localização.
+O Health-flow **não realiza diagnóstico**. O sistema recebe o relato do usuário, organiza informações relevantes, aplica regras de segurança e usa **Agent Harness + Machine Learning** para auxiliar o encaminhamento para o tipo de atendimento adequado.
 
-> O Health-flow não substitui atendimento médico, não realiza diagnóstico autônomo e não prescreve medicamentos. O objetivo é orientar o próximo passo do usuário dentro da rede de saúde.
+## Objetivo
 
-## Problema
-
-Hoje, uma pessoa pode ter dificuldade para responder perguntas simples como:
-
-- Onde devo procurar atendimento para o que estou sentindo?
-- Qual UBS, UPA, hospital ou CAPS está mais próximo?
-- O SUS disponibiliza determinado medicamento?
-- Onde esse medicamento pode ser retirado?
-- Meu plano cobre determinado especialista ou procedimento?
-- Qual profissional da minha rede atende perto de mim?
-- Quais informações do meu histórico são relevantes para o atendimento?
-
-Essas informações existem em sistemas diferentes. O Health-flow propõe uma camada inteligente para conectá-las.
-
-## Como funciona
+A proposta é funcionar como um GPS da saúde:
 
 ```text
-Usuário
-   |
-   v
-Agent Harness
-   |
-   +--> Safety Agent
-   +--> Intent Agent
-   +--> Patient Context Agent
-   +--> SUS Agent
-   +--> Medication Agent
-   +--> Insurance Agent
-   +--> Provider Agent
-   +--> Navigation Agent
-   |
-   v
-Resposta consolidada + próximo passo
+Usuário faz login
+      ↓
+Prontuário/histórico autorizado fica vinculado
+      ↓
+Usuário escreve o que está sentindo
+      ↓
+Agent Harness coordena o fluxo
+      ↓
+LLM estrutura o relato
+      ↓
+Machine Learning auxilia a classificação do encaminhamento
+      ↓
+Regras de segurança e regras do SUS validam a rota
+      ↓
+Sistema encontra o serviço adequado mais próximo
+      ↓
+Usuário recebe endereço, rota e orientação
 ```
 
-O **Agent Harness** é o componente central da arquitetura. Ele controla quais agentes e ferramentas podem ser usados, em qual ordem, quais dados são necessários e quando uma regra de segurança deve interromper o fluxo normal.
+Em caso de possível emergência, o sistema deve priorizar o fluxo de emergência e orientar o acionamento do SAMU 192. O projeto não deve prometer envio automático de ambulância sem integração oficial com a regulação competente.
 
-## Exemplo de jornada
+---
 
-Usuário:
+# Etapas do projeto
 
-> Estou com dor no peito, falta de ar e estou suando. Tenho plano de saúde.
+## Etapa 1 — Encaminhamento inteligente
 
-O sistema não deve começar pesquisando cobertura do plano.
+Esta é a primeira e principal etapa do projeto acadêmico.
 
-O fluxo correto é:
+### Objetivo
 
-1. detectar sinais potencialmente graves;
-2. priorizar atendimento de urgência;
-3. localizar uma unidade apropriada;
-4. só depois considerar informações de cobertura que sejam relevantes.
+Receber o relato do usuário e encaminhá-lo para o tipo de serviço mais adequado, sem diagnosticar.
 
-Outro exemplo:
+Possíveis destinos iniciais:
 
-> O SUS fornece determinado medicamento?
+- UBS / Atenção Primária;
+- UPA / atendimento de urgência;
+- Hospital / emergência, quando aplicável;
+- fluxo de emergência / SAMU 192.
 
-O Health-flow pode consultar a fonte oficial correspondente e responder:
+### Tecnologias obrigatórias da Etapa 1
 
-- se o medicamento consta na relação aplicável;
-- em quais condições ele é disponibilizado;
-- documentos ou critérios necessários;
-- onde procurar atendimento ou retirada;
-- fonte usada para sustentar a resposta.
+- **Agent Harness** — coordena agentes, ferramentas, regras e fluxo;
+- **Machine Learning** — auxilia a classificar o tipo de encaminhamento;
+- **LLM** — transforma o texto livre do usuário em dados estruturados;
+- **regras determinísticas** — protegem situações críticas e validam o resultado;
+- **geolocalização** — encontra a unidade adequada mais próxima;
+- **banco relacional** — guarda dados estruturados do usuário;
+- **RAG / banco vetorial** — consulta regras, protocolos e documentos oficiais quando necessário.
 
-## Agent Harness
+### Papel do Machine Learning
 
-O Harness será responsável por:
+O ML não deve tentar descobrir uma doença.
 
-- identificar a intenção do usuário;
-- controlar o fluxo entre agentes;
-- aplicar guardrails e políticas de segurança;
-- decidir quais tools/APIs podem ser chamadas;
-- controlar acesso a dados sensíveis;
-- registrar auditoria das ações;
-- consolidar a resposta final;
-- impedir que o LLM invente informações que devem vir de bases oficiais.
+Ele recebe variáveis estruturadas e devolve uma classificação auxiliar de encaminhamento.
 
-Exemplo de estado interno:
+Exemplo:
+
+```text
+idade
+sintomas estruturados
+duração
+sinais relatados
+contexto clínico relevante
+        ↓
+Modelo de Machine Learning
+        ↓
+probabilidades / classe de encaminhamento
+        ↓
+UBS | Urgência | Emergência
+```
+
+Exemplo de saída:
 
 ```json
 {
-  "intent": "find_care",
-  "urgency": "urgent",
-  "possible_service": "UPA",
-  "requires_medical_record": false,
-  "insurance": "SUS",
-  "location_required": true,
-  "tools_required": ["health_facility_search"],
-  "human_review_required": false
+  "primary_care": 0.12,
+  "urgent_care": 0.73,
+  "emergency": 0.15
 }
 ```
 
-## Agentes propostos
-
-| Agente | Responsabilidade |
-|---|---|
-| Safety Agent | Identificar sinais críticos e aplicar regras de segurança |
-| Intent Agent | Entender o objetivo da solicitação |
-| Patient Context Agent | Obter apenas contexto clínico autorizado e necessário |
-| SUS Agent | Consultar serviços, regras e acesso pelo SUS |
-| Medication Agent | Consultar medicamentos e regras de dispensação |
-| Insurance Agent | Verificar cobertura, rede e requisitos do plano |
-| Provider Agent | Encontrar unidades e profissionais |
-| Navigation Agent | Converter os resultados em um próximo passo claro |
-| Audit Agent | Registrar fontes, acessos e decisões do fluxo |
-
-## Prontuário e identidade
-
-O sistema não deve liberar um prontuário apenas porque alguém digitou um CPF.
-
-O acesso a informações clínicas deverá considerar:
-
-- autenticação forte;
-- autorização e consentimento;
-- princípio do menor privilégio;
-- rastreabilidade dos acessos;
-- criptografia;
-- LGPD;
-- integração autorizada com sistemas oficiais.
-
-A arquitetura deve tratar prontuário como dado altamente sensível.
-
-## Machine Learning
-
-Não é necessário treinar um modelo de Machine Learning próprio para o primeiro MVP.
-
-O projeto pode começar com:
-
-- LLM para compreensão de linguagem natural;
-- Agent Harness para orquestração;
-- regras determinísticas para segurança;
-- RAG quando necessário;
-- APIs e bases oficiais como fonte de verdade.
-
-Machine Learning tradicional pode ser incluído posteriormente para problemas específicos e mensuráveis, como previsão de demanda, classificação auxiliar ou otimização operacional.
-
-Em decisões clínicas de alto risco, o resultado de um modelo de ML não deve ser a única fonte de decisão.
-
-## MVP
-
-### MVP 1
-
-- interface conversacional;
-- identificação de intenção;
-- triagem de segurança;
-- busca de UBS, UPA, hospital e CAPS;
-- consulta de medicamentos do SUS;
-- respostas com fonte e rastreabilidade.
-
-### MVP 2
-
-- autenticação;
-- perfil do usuário;
-- integração autorizada com dados clínicos;
-- histórico relevante para navegação.
-
-### MVP 3
-
-- planos de saúde;
-- cobertura de especialidades e procedimentos;
-- rede credenciada;
-- prestadores próximos.
-
-### MVP 4
-
-- disponibilidade;
-- encaminhamentos;
-- agendamento quando houver integração;
-- acompanhamento da jornada do usuário.
-
-## Arquitetura inicial
+O resultado do ML não decide sozinho. O Agent Harness combina:
 
 ```text
-Frontend
-   |
-   v
-Backend / API
-   |
-   v
-Agent Harness
-   |
-   +--> Guardrails / Safety Rules
-   |
-   +--> LLM
-   |
-   +--> Agents
-   |      +--> SUS
-   |      +--> Medicamentos
-   |      +--> Planos
-   |      +--> Prontuário
-   |      +--> Localização
-   |
-   +--> Tools / APIs / RAG
-   |
-   v
-Banco + Auditoria + Observabilidade
+LLM + ML + regras de segurança + regras do SUS + contexto autorizado
+                              ↓
+                      decisão de roteamento
+```
+
+Uma regra crítica pode sobrepor o modelo:
+
+```python
+if red_flag_detected:
+    route = "emergency_flow"
+```
+
+### Fluxo da Etapa 1
+
+```text
+LOGIN
+  ↓
+IDENTIDADE / PRONTUÁRIO AUTORIZADO
+  ↓
+"O que você está sentindo?"
+  ↓
+LLM extrai dados estruturados
+  ↓
+Safety Agent
+  ↓
+Machine Learning
+  ↓
+Care Routing Agent
+  ↓
+Regras do SUS
+  ↓
+Agent Harness valida a rota
+  ↓
+UBS / UPA / Hospital / Emergência
+  ↓
+Geolocalização
+  ↓
+Unidade adequada mais próxima
+  ↓
+Resposta ao usuário
+```
+
+### Limite do sistema
+
+O sistema deve responder:
+
+> "Com as informações fornecidas, o encaminhamento indicado pelo sistema é procurar atendimento de urgência."
+
+E não:
+
+> "Você tem pneumonia."
+
+---
+
+## Etapa 2 — Medicamentos no SUS
+
+Depois do roteamento assistencial, o Health-flow passa a responder questões como:
+
+- O SUS disponibiliza este medicamento?
+- Ele faz parte da relação aplicável?
+- Quais são os critérios de acesso?
+- Precisa de receita ou documentação específica?
+- Onde o usuário pode tentar obter o medicamento?
+- Qual unidade ou farmácia vinculada está mais próxima?
+
+Fluxo:
+
+```text
+Usuário pergunta pelo medicamento
+        ↓
+Medication Agent
+        ↓
+RAG + fontes oficiais + APIs/bases disponíveis
+        ↓
+verificação de disponibilidade/regras
+        ↓
+geolocalização
+        ↓
+local de acesso mais adequado
+        ↓
+resposta com fonte
+```
+
+O LLM não deve inventar cobertura ou disponibilidade de medicamento. A resposta precisa estar ligada a uma fonte verificável.
+
+---
+
+## Etapa 3 — Planos de saúde
+
+A terceira etapa adiciona saúde suplementar.
+
+O usuário poderá informar ou vincular seu plano e perguntar:
+
+- Meu plano cobre este hospital?
+- Este hospital faz parte da minha rede?
+- Meu plano cobre determinada especialidade?
+- Quais especialistas da minha rede existem perto de mim?
+- Preciso de autorização?
+- Qual unidade da rede é mais próxima?
+
+Fluxo:
+
+```text
+Usuário / plano vinculado
+        ↓
+Insurance Agent
+        ↓
+produto/plano específico
+        ↓
+cobertura + rede credenciada
+        ↓
+especialidade / hospital / serviço
+        ↓
+geolocalização
+        ↓
+opções mais adequadas
+        ↓
+resposta
+```
+
+Não basta conhecer a operadora. O sistema deve considerar o produto/plano específico e as informações verificáveis da rede.
+
+---
+
+## Arquitetura resumida
+
+```text
+                        HEALTH-FLOW
+
+                            Usuário
+                              |
+                            Login
+                              |
+                    Prontuário autorizado
+                              |
+                              v
+                       Agent Harness
+                              |
+          +-------------------+-------------------+
+          |                   |                   |
+          v                   v                   v
+         LLM                 ML                Regras
+          |                   |              de segurança
+          +-------------------+-------------------+
+                              |
+                              v
+                    Care Routing Agent
+                              |
+                regras / conhecimento SUS
+                              |
+        +---------------------+---------------------+
+        |                     |                     |
+       UBS                   UPA               Emergência
+        |                     |                     |
+        +---------- Geolocalização -----------------+
+                              |
+                              v
+                        Resposta final
 ```
 
 Mais detalhes em [docs/architecture.md](docs/architecture.md).
 
-## Princípios de segurança
+## Dados e RAG
 
-- Não diagnosticar autonomamente.
-- Não prescrever ou alterar medicamentos.
-- Priorizar emergências sobre buscas administrativas.
-- Não acessar prontuário apenas com CPF.
-- Não responder cobertura com base apenas na memória do LLM.
-- Informações de medicamentos devem ser sustentadas por fontes oficiais.
-- Informações de planos devem considerar produto, contrato e rede aplicáveis.
-- Registrar a origem das informações usadas.
-- Expor incerteza quando os dados forem insuficientes.
-- Minimizar o tratamento de dados pessoais e sensíveis.
+O prontuário não deve ser armazenado apenas em banco vetorial.
 
-## Objetivo do projeto
+### PostgreSQL
 
-Construir um **GPS da saúde**: o usuário descreve sua necessidade e o sistema organiza dados, serviços e regras para indicar de forma segura qual é o próximo passo dentro do SUS ou da saúde suplementar.
+Para dados estruturados:
 
----
+- usuários;
+- consentimentos;
+- medicamentos ativos;
+- alergias;
+- condições registradas;
+- atendimentos;
+- exames estruturados;
+- plano;
+- auditoria.
 
-Projeto em desenvolvimento.
+### PostgreSQL + pgvector
+
+Para RAG e busca semântica:
+
+- protocolos;
+- regras do SUS;
+- documentação de medicamentos;
+- documentos administrativos;
+- regras de planos;
+- conteúdo oficial não estruturado.
+
+### Object Storage
+
+Para arquivos originais:
+
+- PDFs;
+- laudos;
+- documentos;
+- imagens.
+
+## Princípios
+
+- Não diagnosticar.
+- Não prescrever.
+- Não alterar tratamento.
+- ML auxilia o encaminhamento; não faz diagnóstico.
+- Emergências têm prioridade.
+- O LLM não decide sozinho.
+- O resultado deve ser auditável.
+- O prontuário completo não deve ser enviado ao LLM por padrão.
+- Dados clínicos só podem ser usados quando necessários e autorizados.
+- Informações de medicamentos e planos devem vir de fontes verificáveis.
+
+## Stack inicial sugerida
+
+```text
+Frontend: React / Next.js
+Backend: Python + FastAPI
+Agent orchestration: Agent Harness
+LLM: OpenAI
+Machine Learning: Python + scikit-learn
+Banco: PostgreSQL
+Vector DB: pgvector
+RAG: embeddings + retrieval
+Cache: Redis
+Arquivos: S3 / Object Storage
+```
+
+## Status
+
+O desenvolvimento começa pela **Etapa 1: Agent Harness + Machine Learning + encaminhamento assistencial**.
