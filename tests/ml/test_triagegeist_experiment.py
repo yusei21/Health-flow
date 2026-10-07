@@ -75,11 +75,12 @@ def test_metadata_describes_dataset_split_and_features(result: ExperimentResult)
         "logistic_regression",
         "decision_tree",
         "random_forest",
+        "neural_network_mlp",
     }
 
 
 def test_writes_one_record_per_model_with_required_fields(result: ExperimentResult) -> None:
-    assert len(result.benchmark_files) == 3
+    assert len(result.benchmark_files) == 4
     for path in result.benchmark_files:
         text = path.read_text()
         assert "NaN" not in text

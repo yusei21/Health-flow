@@ -44,11 +44,12 @@ def test_metadata_describes_dataset_split_and_features(result: ExperimentResult)
         "logistic_regression",
         "decision_tree",
         "random_forest",
+        "neural_network_mlp",
     }
 
 
 def test_writes_one_valid_json_record_per_model(result: ExperimentResult) -> None:
-    assert len(result.benchmark_files) == 3
+    assert len(result.benchmark_files) == 4
     for path in result.benchmark_files:
         record = json.loads(path.read_text())  # strict JSON: NaN would fail elsewhere
         assert "NaN" not in path.read_text()
@@ -70,7 +71,7 @@ def test_rerun_never_overwrites_previous_records(workspace: Path, result: Experi
         EXPERIMENT, workspace / "processed.csv", workspace / "model2", workspace / "bench"
     )
     assert not set(again.benchmark_files) & set(result.benchmark_files)
-    assert len(list((workspace / "bench").glob("*.json"))) == 6
+    assert len(list((workspace / "bench").glob("*.json"))) == 8
 
 
 def test_saved_model_loads_and_evaluation_reproduces_held_out_metrics(

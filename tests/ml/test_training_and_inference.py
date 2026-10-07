@@ -79,6 +79,7 @@ def test_metadata_contains_required_fields(trained_model_dir: Path) -> None:
         "logistic_regression",
         "decision_tree",
         "random_forest",
+        "neural_network_mlp",
     }
 
 
