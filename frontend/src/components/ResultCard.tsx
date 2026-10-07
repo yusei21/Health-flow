@@ -2,7 +2,7 @@ import type { RoutingResponse } from "../types/routing";
 import { careLevelLabel, formatDistance, isEmergency, serviceTypeLabel } from "../services/presentation";
 
 export function ResultCard({ result }: { result: RoutingResponse }) {
-  const emergency = isEmergency(result.care_level);
+  const emergency = !result.needs_more_information && isEmergency(result.care_level);
   const facility = result.facility;
 
   return (
@@ -14,9 +14,9 @@ export function ResultCard({ result }: { result: RoutingResponse }) {
         </div>
       )}
 
-      <dl className="result-grid">
+      {result.needs_more_information && (\n        <div role="status">\n          <strong>Informações insuficientes para determinar a gravidade.</strong>\n          <p>Responda às perguntas abaixo no relato e faça uma nova busca.</p>\n          <ul>{(result.follow_up_questions ?? []).map((question) => <li key={question}>{question}</li>)}</ul>\n        </div>\n      )}\n      <dl className="result-grid">
         <dt>Nível de atendimento</dt>
-        <dd>{careLevelLabel(result.care_level)}</dd>
+        <dd>{result.needs_more_information ? "Avaliação adicional necessária" : careLevelLabel(result.care_level)}</dd>
         <dt>Tipo de serviço</dt>
         <dd>{serviceTypeLabel(result.recommended_service_type)}</dd>
         <dt>Orientação</dt>
