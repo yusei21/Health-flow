@@ -22,7 +22,7 @@ from app.repositories.patients import (
     synthetic_demo_patient,
 )
 from app.safety.engine import SafetyEngine
-from app.tools.facilities import MockFacilityProvider, simulated_facilities
+from app.tools.osm_facilities import OpenStreetMapFacilityProvider
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def build_container(settings: Settings) -> Container:
         inference=inference,
         routing_agent=CareRoutingAgent(settings.ml_low_confidence_threshold),
         navigation_agent=NavigationAgent(
-            MockFacilityProvider(simulated_facilities()), settings.facility_search_radius_km
+            OpenStreetMapFacilityProvider(), settings.facility_search_radius_km
         ),
     )
     return Container(
