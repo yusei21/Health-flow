@@ -1,523 +1,509 @@
-# Arquitetura do Health-flow
+# Arquitetura — Health-flow
 
-## Visão geral
+## Escopo acadêmico
 
-O Health-flow usa uma arquitetura orientada a agentes em que o **Agent Harness** atua como orquestrador central.
-
-O usuário deve se autenticar e vincular sua identidade antes de qualquer acesso a dados clínicos. Depois disso, o sistema pode exibir uma área de prontuário/histórico com os dados que estiverem disponíveis e autorizados.
-
-O LLM não deve receber o prontuário completo por padrão. O Harness decide quais informações são realmente necessárias para a solicitação atual e monta um contexto mínimo antes de chamar o modelo.
-
-A arquitetura separa quatro responsabilidades principais:
-
-1. dados clínicos estruturados do paciente;
-2. documentos e conhecimento para RAG;
-3. arquivos originais, como laudos e PDFs;
-4. orquestração por Agent Harness.
-
-## Fluxo de autenticação e prontuário
+O projeto será desenvolvido em três etapas.
 
 ```text
-Usuário
-   |
-   v
-Autenticação / vínculo de identidade
-   |
-   v
-Consentimento e autorização
-   |
-   v
-Backend consulta dados clínicos autorizados
-   |
-   v
-Prontuário / histórico do paciente
-   |
-   v
-Context Builder
-   |
-   v
-Somente contexto relevante
-   |
-   v
-Agent Harness + LLM + Tools
+ETAPA 1
+Encaminhamento assistencial
+Agent Harness + Machine Learning
+        ↓
+ETAPA 2
+Medicamentos no SUS
+        ↓
+ETAPA 3
+Planos de saúde
 ```
 
-O CPF isoladamente não é suficiente para liberar acesso ao prontuário.
+A prioridade inicial é demonstrar, de maneira clara, a aplicação de conceitos de Inteligência Artificial sem transformar o sistema em ferramenta de diagnóstico.
 
-O sistema deve considerar mecanismos adequados de autenticação, autorização, consentimento, rastreabilidade e controle de acesso.
+---
 
-## Prontuário exibido ao usuário
+# Etapa 1 — Agent Harness + Machine Learning
 
-A interface pode apresentar uma visão organizada do histórico disponível, por exemplo:
+## Problema
+
+O usuário entra no sistema, possui um prontuário/histórico vinculado e descreve em linguagem natural o que está sentindo.
+
+O Health-flow deve transformar esse relato em uma recomendação de **tipo de serviço**, por exemplo:
+
+- Atenção Primária / UBS;
+- Urgência / UPA;
+- Emergência / fluxo SAMU.
+
+A saída é um encaminhamento, não um diagnóstico.
+
+## Pipeline
+
+```mermaid
+flowchart TD
+    U[Usuário] --> AUTH[Login / identidade]
+    AUTH --> P[Prontuário autorizado]
+    P --> TXT[Relato em linguagem natural]
+    TXT --> H[Agent Harness]
+
+    H --> LLM[LLM - extração estruturada]
+    LLM --> S[Safety Agent]
+    S --> ML[Modelo de Machine Learning]
+    ML --> CR[Care Routing Agent]
+
+    CR --> RULES[Regras do SUS / segurança]
+    RULES --> DEC[Decisão de roteamento]
+
+    DEC --> UBS[UBS]
+    DEC --> UPA[UPA]
+    DEC --> EM[Emergência / SAMU]
+
+    UBS --> GEO[Geolocalização]
+    UPA --> GEO
+    EM --> GEO
+
+    GEO --> R[Resposta]
+```
+
+## Responsabilidades
+
+### Agent Harness
+
+O Harness é o orquestrador.
+
+Ele deve:
+
+- controlar a ordem das etapas;
+- decidir quais ferramentas podem ser usadas;
+- combinar LLM, ML, regras e dados;
+- interromper o fluxo comum quando houver regra crítica;
+- impedir que a resposta final extrapole o objetivo do sistema;
+- registrar o caminho que levou ao encaminhamento.
+
+### LLM
+
+O LLM interpreta linguagem natural.
+
+Exemplo:
+
+Entrada:
 
 ```text
-Meu Prontuário
-
-- Medicamentos
-- Alergias
-- Condições registradas
-- Consultas
-- Exames
-- Vacinas
-- Atendimentos
-- Documentos clínicos
+Estou com uma dor muito forte no peito e estou com falta de ar há uns 20 minutos.
 ```
 
-A informação mostrada ao usuário pode ser ampla, mas isso não significa que todo esse conteúdo será enviado ao LLM.
-
-## Context Builder
-
-Entre o prontuário e o LLM deve existir uma camada de seleção de contexto.
-
-```text
-Prontuário completo
-        |
-        v
-Context Builder
-        |
-        +--> intenção atual
-        +--> regras de minimização
-        +--> permissões do usuário
-        +--> relevância clínica
-        |
-        v
-Contexto mínimo necessário
-        |
-        v
-LLM
-```
-
-Exemplo: se o usuário pergunta apenas onde retirar um medicamento, não há motivo para enviar anos de histórico médico ao modelo.
-
-Um contexto enviado ao agente poderia ser algo como:
+Saída estruturada:
 
 ```json
 {
-  "patient_context": {
-    "active_medications": ["..."],
-    "allergies": ["..."],
-    "relevant_conditions": ["..."]
+  "symptoms": ["dor no peito", "falta de ar"],
+  "duration_minutes": 20,
+  "severity_reported": "strong",
+  "conscious": true
+}
+```
+
+O LLM não deve produzir diagnóstico.
+
+### Machine Learning
+
+O Machine Learning deve fazer parte da Etapa 1 porque é requisito acadêmico.
+
+Objetivo sugerido: **classificação auxiliar do nível de encaminhamento**.
+
+Classes iniciais:
+
+```text
+0 = atenção primária
+1 = urgência
+2 = possível emergência
+```
+
+Features possíveis:
+
+```text
+- faixa etária
+- duração
+- número de sintomas
+- intensidade relatada
+- presença de sinais estruturados
+- condições relevantes
+- medicamentos relevantes
+- recorrência
+```
+
+Saída possível:
+
+```json
+{
+  "class": "urgent_care",
+  "probability": 0.81,
+  "distribution": {
+    "primary_care": 0.08,
+    "urgent_care": 0.81,
+    "emergency": 0.11
   }
 }
 ```
 
-## Fluxo principal do Agent Harness
+O modelo pode começar simples, por exemplo com:
 
-```mermaid
-flowchart TD
-    U[Usuário] --> AUTH[Autenticação e Consentimento]
-    AUTH --> API[Backend/API]
-    API --> H[Agent Harness]
+- Logistic Regression;
+- Decision Tree;
+- Random Forest.
 
-    H --> S[Safety Agent]
-    H --> I[Intent Agent]
+A escolha deve ser validada por métricas em um dataset apropriado.
 
-    I --> PC[Patient Context Agent]
-    PC --> CB[Context Builder]
-    CB --> DB[(PostgreSQL)]
-
-    I --> SUS[SUS Agent]
-    I --> M[Medication Agent]
-    I --> P[Insurance Agent]
-    I --> L[Provider Agent]
-    I --> RAG[RAG Engine]
-
-    RAG --> V[(Vector Store / pgvector)]
-    RAG --> OBJ[(Object Storage)]
-
-    SUS --> NAV[Navigation Agent]
-    M --> NAV
-    P --> NAV
-    L --> NAV
-    RAG --> NAV
-    CB --> NAV
-    S --> NAV
-
-    NAV --> A[Audit Agent]
-    A --> RESP[Resposta]
-```
-
-## Ordem de decisão
-
-```text
-1. Segurança
-2. Intenção
-3. Identidade
-4. Consentimento
-5. Dados necessários
-6. Construção do contexto mínimo
-7. Seleção de ferramentas
-8. Consulta às fontes
-9. Consolidação
-10. Auditoria
-11. Resposta
-```
-
-Uma possível emergência deve interromper fluxos administrativos, como consulta de cobertura de plano.
-
-## Armazenamento
-
-O Health-flow não deve usar banco vetorial como substituto de banco relacional.
-
-A arquitetura recomendada possui três camadas principais de armazenamento.
-
-### 1. Banco relacional
-
-Sugestão: **PostgreSQL**.
-
-Deve armazenar dados estruturados e que exigem consultas exatas, como:
-
-- pacientes;
-- vínculos de identidade;
-- consentimentos;
-- medicamentos ativos;
-- alergias;
-- condições clínicas;
-- consultas;
-- exames estruturados;
-- plano de saúde;
-- autorizações;
-- auditoria.
-
-Exemplo:
-
-```sql
-SELECT allergy_name
-FROM patient_allergies
-WHERE patient_id = :patient_id;
-```
-
-Esse tipo de dado não precisa de busca vetorial.
-
-### 2. Banco vetorial
-
-Sugestão para o MVP: **PostgreSQL + pgvector**.
-
-O banco vetorial deve ser usado principalmente para recuperação semântica de documentos e conteúdo não estruturado.
-
-Exemplos:
-
-- protocolos clínicos;
-- manuais do SUS;
-- políticas administrativas;
-- documentação de medicamentos;
-- regras de cobertura;
-- FAQs oficiais;
-- notas clínicas não estruturadas, quando houver justificativa e autorização;
-- chunks de documentos.
-
-Estrutura conceitual:
-
-```text
-document_chunks
-- id
-- source
-- title
-- text
-- metadata
-- embedding VECTOR(...)
-```
-
-### 3. Object Storage
-
-Arquivos originais devem permanecer fora do banco vetorial.
-
-Exemplos:
-
-- PDFs;
-- laudos;
-- documentos médicos;
-- imagens;
-- arquivos recebidos de integrações.
-
-Pode ser usado S3 ou serviço compatível.
-
-## RAG
-
-O RAG serve para recuperar conhecimento documental relevante antes da geração da resposta.
-
-Fluxo:
-
-```text
-Pergunta
-   |
-   v
-Embedding
-   |
-   v
-Busca vetorial
-   |
-   v
-Chunks relevantes
-   |
-   v
-Filtros por fonte / data / domínio
-   |
-   v
-LLM
-   |
-   v
-Resposta com referência da fonte
-```
-
-O RAG é recomendado para:
-
-- protocolos do SUS;
-- documentação oficial;
-- regras de medicamentos;
-- RENAME e documentos relacionados;
-- regras administrativas;
-- políticas de cobertura;
-- manuais;
-- FAQs;
-- documentos de planos quando legalmente e tecnicamente disponíveis.
-
-O RAG deve preservar:
-
-- origem;
-- URL ou identificador da fonte;
-- data;
-- versão;
-- metadados;
-- trecho utilizado.
-
-## O prontuário não deve ser tratado como um grande RAG
-
-O prontuário é uma fonte primária de dados pessoais e clínicos.
-
-A regra geral deve ser:
-
-```text
-Dados estruturados do paciente
-        |
-        v
-Consulta direta ao banco/API
-
-Documentos e conhecimento
-        |
-        v
-RAG / busca vetorial
-```
-
-É aceitável usar busca vetorial sobre partes não estruturadas do histórico quando houver um caso de uso claro, controle de acesso e justificativa técnica.
-
-Mesmo nesse caso, o resultado recuperado deve passar pelo Context Builder antes de chegar ao LLM.
-
-## Tools previstas
-
-### Saúde pública
-
-- busca de estabelecimentos;
-- UBS;
-- UPA;
-- hospitais;
-- CAPS;
-- serviços oferecidos;
-- medicamentos;
-- regras de dispensação;
-- informações administrativas do SUS.
-
-### Saúde suplementar
-
-- operadora;
-- produto/plano;
-- cobertura;
-- rede credenciada;
-- autorização;
-- prestadores disponíveis.
-
-### Localização
-
-A localização deve ser acessada somente quando necessária.
-
-Pode ser usada para encontrar:
-
-- UBS;
-- UPA;
-- hospitais;
-- CAPS;
-- farmácias;
-- clínicas;
-- profissionais credenciados.
-
-### Dados clínicos
-
-O Patient Context Agent pode consultar apenas informações necessárias e autorizadas.
-
-Exemplos:
-
-- alergias;
-- medicamentos ativos;
-- condições relevantes;
-- exames recentes;
-- histórico necessário para aquela interação.
-
-## Exemplo de execução
-
-Usuário:
-
-> Estou com muita tontura e fraqueza.
-
-Fluxo:
-
-```text
-Intent Agent
-     |
-     v
-Safety Agent
-     |
-     v
-Patient Context Agent
-     |
-     v
-Context Builder
-     |
-     +--> medicamentos relevantes
-     +--> alergias
-     +--> condições relacionadas
-     |
-     v
-RAG
-     |
-     +--> protocolo apropriado
-     |
-     v
-Provider Agent
-     |
-     +--> unidade adequada, se necessário
-     |
-     v
-Navigation Agent
-     |
-     v
-Resposta
-```
-
-## Guardrails
-
-Algumas decisões devem ser implementadas em software, não apenas em prompt.
+O ML nunca deve ter autoridade para rebaixar uma regra crítica.
 
 ```python
-if emergency_signals:
-    block_normal_flow()
-    route_to_urgent_care()
+ml_result = routing_model.predict(features)
 
-if tool_requires_health_data and not consent:
-    deny_tool_call()
-
-if patient_context_requested:
-    context = build_minimum_required_context()
-
-if medication_answer and not official_source:
-    block_final_answer()
-
-if insurance_coverage_answer and not verified_plan_data:
-    return_uncertain_result()
-
-if model_requests_full_record_without_reason:
-    deny_full_record_access()
+if safety_rules.has_red_flag(features):
+    final_route = "emergency"
+else:
+    final_route = harness.combine(ml_result, sus_rules)
 ```
 
-## Contrato entre agentes
+### Safety Agent
 
-Os agentes devem retornar estruturas tipadas.
+Responsável por sinais críticos e guardrails.
+
+Ele deve funcionar independentemente do resultado probabilístico do ML.
+
+```text
+relato
+   ↓
+extração
+   ↓
+red flags?
+   ├── sim → fluxo de emergência
+   └── não → ML + roteamento comum
+```
+
+### Care Routing Agent
+
+Recebe:
+
+- resultado do ML;
+- regras;
+- contexto autorizado;
+- tipo de atendimento permitido.
+
+Produz:
+
+```json
+{
+  "care_level": "urgent_care",
+  "service_type": "UPA",
+  "reason_codes": [
+    "acute_symptoms",
+    "prompt_evaluation_required"
+  ]
+}
+```
+
+Não existe campo `diagnosis`.
+
+## Emergência e SAMU
+
+No MVP, o sistema deve detectar um **possível cenário de emergência** e orientar o fluxo correspondente.
+
+```text
+Possível emergência
+        ↓
+Harness interrompe fluxo normal
+        ↓
+confirma/localiza usuário
+        ↓
+orienta SAMU 192 / serviço de emergência
+```
+
+Uma futura integração oficial poderia encaminhar a solicitação para a central adequada, mas o sistema não deve simular despacho autônomo de ambulância.
+
+## Localização
+
+Depois de determinar o tipo de atendimento:
+
+```text
+care_level
+    ↓
+service_type
+    ↓
+localização do usuário
+    ↓
+busca apenas estabelecimentos compatíveis
+    ↓
+ordenação por distância/disponibilidade
+    ↓
+unidade mais adequada
+```
+
+O sistema não deve procurar simplesmente "o hospital mais próximo".
+
+Primeiro determina o tipo de serviço; depois procura o estabelecimento correspondente.
+
+---
+
+# Prontuário e Context Builder
+
+## Login
+
+A pessoa entra no sistema e seu perfil fica associado ao prontuário/histórico autorizado.
+
+CPF isoladamente não deve ser suficiente para liberar dados clínicos.
+
+## Context Builder
+
+O Agent Harness não deve enviar o prontuário inteiro ao modelo.
+
+```text
+Prontuário
+    ↓
+Context Builder
+    ↓
+seleção por relevância
+    ↓
+contexto mínimo
+    ↓
+agentes
+```
 
 Exemplo:
 
 ```json
 {
-  "agent": "safety",
-  "status": "completed",
-  "risk_level": "urgent",
-  "reason_codes": [
-    "chest_pain",
-    "shortness_of_breath"
-  ],
-  "recommended_route": "urgent_care",
-  "confidence": 0.94
+  "relevant_context": {
+    "age_range": "adult",
+    "conditions": ["..."],
+    "active_medications": ["..."],
+    "allergies": ["..."]
+  }
 }
 ```
 
-## Fontes de verdade
+---
 
-O LLM interpreta e explica, mas não deve ser a fonte primária para:
+# RAG
 
-- prontuário;
-- medicamentos disponíveis;
-- cobertura de plano;
-- rede credenciada;
-- localização de unidades;
-- horários;
-- requisitos administrativos;
-- disponibilidade de atendimento.
+RAG será usado como mecanismo de recuperação de conhecimento.
 
-Essas informações devem vir de APIs, bancos autorizados, ferramentas ou documentos oficiais.
+## Etapa 1
 
-## Machine Learning
+Pode recuperar:
 
-Machine Learning próprio continua opcional no MVP.
+- regras de navegação do SUS;
+- protocolos;
+- descrição dos tipos de estabelecimento;
+- documentos oficiais relevantes.
 
-A primeira versão pode funcionar com:
+## Etapa 2
 
-- Agent Harness;
-- LLM;
-- regras determinísticas;
-- RAG;
-- ferramentas;
-- APIs;
-- PostgreSQL;
-- pgvector.
+Será ampliado para:
 
-Um modelo de ML específico pode ser adicionado depois para problemas mensuráveis, como:
+- medicamentos;
+- RENAME;
+- regras de dispensação;
+- documentos estaduais/municipais quando disponíveis.
 
-- previsão de demanda;
-- classificação auxiliar;
-- priorização operacional;
-- recomendação de fluxo;
-- detecção de padrões.
+## Etapa 3
 
-Decisões clínicas críticas não devem depender exclusivamente de um modelo de ML.
+Será ampliado para:
 
-## Stack sugerida
+- regras de cobertura;
+- materiais dos planos;
+- rede e documentação complementar quando disponível.
+
+## Fluxo
 
 ```text
-Frontend
-React / Next.js
-
-Backend
-Python + FastAPI
-
-Orquestração
-Agent Harness
-
-LLM
-OpenAI
-
-Banco principal
-PostgreSQL
-
-Busca vetorial
+consulta
+  ↓
+embedding
+  ↓
 pgvector
-
-RAG
-Embeddings + retrieval + filtros de metadados
-
-Cache
-Redis
-
-Arquivos
-S3 / Object Storage
-
-Autenticação
-OAuth / mecanismo autorizado
-
-Observabilidade
-Logs + tracing + auditoria
+  ↓
+chunks relevantes
+  ↓
+metadados / filtros
+  ↓
+agente
 ```
 
-Para um MVP, PostgreSQL + pgvector reduz a complexidade operacional porque permite manter dados relacionais e vetoriais no mesmo ecossistema.
+---
 
-## Estrutura sugerida do projeto
+# Persistência
+
+## PostgreSQL
+
+Dados estruturados:
+
+```text
+users
+patient_profiles
+consents
+allergies
+conditions
+medications
+encounters
+routing_requests
+routing_results
+insurance_profiles
+audit_logs
+```
+
+## pgvector
+
+Conhecimento não estruturado:
+
+```text
+documents
+document_chunks
+embeddings
+sources
+metadata
+```
+
+## Object Storage
+
+Arquivos originais:
+
+```text
+PDF
+laudos
+documentos
+imagens
+```
+
+---
+
+# Etapa 2 — Medicamentos no SUS
+
+## Objetivo
+
+Responder:
+
+```text
+"O SUS tem este medicamento?"
+"Como consigo?"
+"Onde encontro?"
+```
+
+## Arquitetura
+
+```text
+Usuário
+  ↓
+Agent Harness
+  ↓
+Medication Agent
+  ↓
+RAG / fontes oficiais
+  ↓
+regras de acesso
+  ↓
+localização
+  ↓
+ponto de acesso compatível
+  ↓
+resposta + fonte
+```
+
+Dados desejados:
+
+- medicamento;
+- apresentação;
+- disponibilidade na relação aplicável;
+- critérios;
+- documentos necessários;
+- local de acesso;
+- fonte.
+
+---
+
+# Etapa 3 — Planos de saúde
+
+## Objetivo
+
+Responder:
+
+```text
+"Meu plano cobre este hospital?"
+"Quais especialistas estão disponíveis?"
+"Este médico está na minha rede?"
+"Onde existe atendimento da minha rede?"
+```
+
+## Arquitetura
+
+```text
+Usuário
+  ↓
+plano vinculado
+  ↓
+Agent Harness
+  ↓
+Insurance Agent
+  ↓
+produto específico
+  ↓
+cobertura + rede
+  ↓
+Provider Agent
+  ↓
+especialistas / hospitais
+  ↓
+localização
+  ↓
+resposta
+```
+
+O sistema precisa conhecer o plano/produto específico, e não apenas o nome da operadora.
+
+---
+
+# Arquitetura completa
+
+```text
+                         HEALTH-FLOW
+
+                              |
+                              v
+                         LOGIN / AUTH
+                              |
+                              v
+                    PRONTUÁRIO AUTORIZADO
+                              |
+                              v
+                       AGENT HARNESS
+                              |
+          +-------------------+-------------------+
+          |                   |                   |
+          v                   v                   v
+         LLM                 ML              Safety Rules
+          |                   |                   |
+          +-------------------+-------------------+
+                              |
+                       Care Routing
+                              |
+                    Regras / RAG SUS
+                              |
+        +---------------------+---------------------+
+        |                     |                     |
+       UBS                   UPA              Emergência
+        |                     |                     |
+        +--------------- Geolocalização ------------+
+                              |
+                              v
+                         RESPOSTA
+
+ETAPA 2:
+Harness → Medication Agent → RAG → SUS → localização
+
+ETAPA 3:
+Harness → Insurance Agent → cobertura/rede → especialistas/hospitais
+```
+
+---
+
+# Estrutura de pastas sugerida
 
 ```text
 health-flow/
@@ -526,12 +512,16 @@ health-flow/
 │   │   ├── safety/
 │   │   ├── intent/
 │   │   ├── patient_context/
-│   │   ├── sus/
+│   │   ├── care_routing/
 │   │   ├── medication/
 │   │   ├── insurance/
-│   │   ├── provider/
-│   │   └── navigation/
+│   │   └── provider/
 │   ├── harness/
+│   ├── ml/
+│   │   ├── training/
+│   │   ├── inference/
+│   │   ├── features/
+│   │   └── evaluation/
 │   ├── context_builder/
 │   ├── rag/
 │   ├── tools/
@@ -540,94 +530,40 @@ health-flow/
 │   ├── auth/
 │   ├── database/
 │   └── schemas/
+├── data/
+│   ├── raw/
+│   └── processed/
+├── models/
 ├── migrations/
 ├── tests/
 │   ├── safety/
+│   ├── ml/
 │   ├── agents/
 │   ├── rag/
 │   └── integration/
-├── docs/
-│   └── architecture.md
-└── README.md
+└── docs/
+    └── architecture.md
 ```
 
-## Modelo conceitual final
+# Ordem de implementação
 
 ```text
-                         HEALTH-FLOW
-
-                              |
-                              v
-                       Frontend / App
-                              |
-                    Login / autenticação
-                              |
-                    Consentimento / vínculo
-                              |
-                              v
-                         Backend API
-                              |
-                              v
-                      +---------------+
-                      | Agent Harness |
-                      +-------+-------+
-                              |
-       +----------------------+----------------------+
-       |                      |                      |
-       v                      v                      v
-Prontuário estruturado     RAG Engine               Tools
-       |                      |                      |
-       v                      v                      +--> localização
- PostgreSQL             Vector DB / pgvector        +--> SUS
-       |                      |                      +--> planos
-       |                      +--> protocolos        +--> medicamentos
-       |                      +--> manuais           +--> unidades
-       |                      +--> documentos
-       |
-       +--> medicamentos
-       +--> alergias
-       +--> consultas
-       +--> exames
-       +--> condições
-       |
-       v
- Context Builder
-       |
-       v
- Contexto mínimo para o LLM
+1. autenticação e usuário
+2. modelo simplificado de prontuário
+3. contrato de entrada de sintomas
+4. LLM → extração estruturada
+5. dataset para roteamento
+6. treinamento do primeiro modelo ML
+7. avaliação do modelo
+8. Safety Agent
+9. Agent Harness
+10. Care Routing Agent
+11. regras de encaminhamento
+12. geolocalização e busca de unidades
+13. interface da Etapa 1
+14. testes e auditoria
+15. Etapa 2
+16. Etapa 3
 ```
 
-## Próxima implementação recomendada
-
-A primeira implementação deve validar um fluxo vertical completo:
-
-```text
-Usuário autenticado
-        |
-        v
-Consentimento
-        |
-        v
-Usuário descreve necessidade
-        |
-        v
-Intent Agent
-        |
-        v
-Safety Agent
-        |
-        v
-Context Builder
-        |
-        +--> banco do paciente, se necessário
-        +--> RAG, se necessário
-        +--> tools externas, se necessário
-        |
-        v
-Navigation Agent
-        |
-        v
-Resposta com fonte e próximo passo
-```
-
-Esse desenho mantém dados estruturados, RAG e raciocínio do agente separados, reduz exposição de dados pessoais e deixa o sistema mais fácil de auditar e evoluir.
+A primeira entrega acadêmica deve demonstrar claramente onde o **Machine Learning** é utilizado e onde o **Agent Harness** controla o fluxo.
