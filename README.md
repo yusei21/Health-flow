@@ -1,327 +1,121 @@
 # Health-flow
 
+> **PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS.**
+
 Projeto acadêmico de Inteligência Artificial para navegação assistencial no SUS e, em etapas posteriores, consulta de medicamentos e cobertura de planos de saúde.
 
-O Health-flow **não realiza diagnóstico**. O sistema recebe o relato do usuário, organiza informações relevantes, aplica regras de segurança e usa **Agent Harness + Machine Learning** para auxiliar o encaminhamento para o tipo de atendimento adequado.
+O Health-flow **não diagnostica, não prescreve e não substitui profissionais de saúde**. Ele recebe o relato do usuário, estrutura as informações, aplica regras de segurança e usa **Agent Harness + Machine Learning** para indicar o **tipo de serviço** adequado e a unidade compatível mais próxima.
 
-## Objetivo
+Em possível emergência, orienta ligar para o **SAMU 192**. O sistema **não aciona ambulância** — não existe integração com a regulação.
 
-A proposta é funcionar como um GPS da saúde:
+## Como funciona (Etapa 1)
 
 ```text
-Usuário faz login
-      ↓
-Prontuário/histórico autorizado fica vinculado
-      ↓
-Usuário escreve o que está sentindo
-      ↓
-Agent Harness coordena o fluxo
-      ↓
-LLM estrutura o relato
-      ↓
-Machine Learning auxilia a classificação do encaminhamento
-      ↓
-Regras de segurança e regras do SUS validam a rota
-      ↓
-Sistema encontra o serviço adequado mais próximo
-      ↓
-Usuário recebe endereço, rota e orientação
+Login → prontuário autorizado → relato em texto livre
+  → LLM local (Ollama) extrai sintomas estruturados
+  → Context Builder seleciona só o contexto clínico relevante
+  → Safety Engine aplica regras determinísticas (pode impor piso de atendimento)
+  → Machine Learning sugere o nível (pulado se houver red flag)
+  → Care Routing combina: nunca abaixo do piso de segurança
+  → tipo de serviço (UBS | UPA | pronto-socorro + SAMU 192)
+  → unidade compatível mais próxima (dados simulados)
+  → resposta com próximo passo e aviso
 ```
 
-Em caso de possível emergência, o sistema deve priorizar o fluxo de emergência e orientar o acionamento do SAMU 192. O projeto não deve prometer envio automático de ambulância sem integração oficial com a regulação competente.
+| Peça | Papel |
+|---|---|
+| **LLM** (`qwen3:4b` via Ollama) | entende linguagem natural → JSON validado |
+| **Machine Learning** (scikit-learn) | classificação probabilística auxiliar |
+| **Safety Engine** | regras críticas com ID; sempre prevalece |
+| **Agent Harness** | coordena etapas, falhas e quem tem autoridade |
+| **Tools** | busca de unidades (provider simulado) |
 
----
+Detalhes: [docs/architecture.md](docs/architecture.md) · ML (dataset, modelos, métricas, limitações): [docs/machine-learning.md](docs/machine-learning.md)
 
-# Etapas do projeto
+## Executando
 
-## Etapa 1 — Encaminhamento inteligente
+Pré-requisitos: Python 3.12, [uv](https://docs.astral.sh/uv/), [Ollama](https://ollama.com) com o modelo baixado.
 
-Esta é a primeira e principal etapa do projeto acadêmico.
-
-### Objetivo
-
-Receber o relato do usuário e encaminhá-lo para o tipo de serviço mais adequado, sem diagnosticar.
-
-Possíveis destinos iniciais:
-
-- UBS / Atenção Primária;
-- UPA / atendimento de urgência;
-- Hospital / emergência, quando aplicável;
-- fluxo de emergência / SAMU 192.
-
-### Tecnologias obrigatórias da Etapa 1
-
-- **Agent Harness** — coordena agentes, ferramentas, regras e fluxo;
-- **Machine Learning** — auxilia a classificar o tipo de encaminhamento;
-- **LLM** — transforma o texto livre do usuário em dados estruturados;
-- **regras determinísticas** — protegem situações críticas e validam o resultado;
-- **geolocalização** — encontra a unidade adequada mais próxima;
-- **banco relacional** — guarda dados estruturados do usuário;
-- **RAG / banco vetorial** — consulta regras, protocolos e documentos oficiais quando necessário.
-
-### Papel do Machine Learning
-
-O ML não deve tentar descobrir uma doença.
-
-Ele recebe variáveis estruturadas e devolve uma classificação auxiliar de encaminhamento.
+```bash
+ollama pull qwen3:4b          # uma vez; não é baixado automaticamente
+cp .env.example .env          # ajuste HEALTHFLOW_DEMO_AUTH_TOKEN
+make install                  # uv sync
+make train                    # gera dataset sintético + treina e salva models/
+make dev                      # API em http://localhost:8000 (docs em /docs)
+```
 
 Exemplo:
 
-```text
-idade
-sintomas estruturados
-duração
-sinais relatados
-contexto clínico relevante
-        ↓
-Modelo de Machine Learning
-        ↓
-probabilidades / classe de encaminhamento
-        ↓
-UBS | Urgência | Emergência
+```bash
+curl -s -X POST localhost:8000/api/v1/routing \
+  -H "Authorization: Bearer $HEALTHFLOW_DEMO_AUTH_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"message":"estou com dor forte no peito e falta de ar há 20 minutos","latitude":-23.55,"longitude":-46.64}'
 ```
-
-Exemplo de saída:
 
 ```json
 {
-  "primary_care": 0.12,
-  "urgent_care": 0.73,
-  "emergency": 0.15
+  "request_id": "39642a51-…",
+  "care_level": "EMERGENCY",
+  "recommended_service_type": "EMERGENCY_ROOM",
+  "facility": {"name": "Pronto-Socorro Exemplo (SIMULADA)", "distance_km": 3.06, "is_simulated": true, "...": "..."},
+  "next_step": "Ligue 192 (SAMU) ou dirija-se imediatamente a um pronto-socorro.",
+  "emergency_guidance": "Possível situação de emergência. Ligue imediatamente para o SAMU 192. Este sistema NÃO aciona ambulância automaticamente.",
+  "reason_codes": ["SAFETY_RULE:RED_FLAG_001", "SAFETY_RULE:RED_FLAG_006", "SAFETY_RULE:CAUTION_001", "SAFETY_OVERRIDE"],
+  "safety_override": true,
+  "disclaimer": "PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS. …"
 }
 ```
 
-O resultado do ML não decide sozinho. O Agent Harness combina:
+### Rotas
 
-```text
-LLM + ML + regras de segurança + regras do SUS + contexto autorizado
-                              ↓
-                      decisão de roteamento
+| Método | Rota | Auth |
+|---|---|---|
+| GET | `/health` | não |
+| POST | `/api/v1/routing` | Bearer |
+| GET | `/api/v1/patients/me` | Bearer |
+
+A autenticação atual é um **token de demonstração** ligado a um paciente **fictício**; é recusada quando `HEALTHFLOW_APP_ENV=production`.
+
+### Comandos
+
+```bash
+make test         # pytest (não precisa do Ollama)
+make test-ollama  # teste de integração real com o Ollama local
+make lint         # ruff check + format --check
+make format
+make typecheck    # mypy --strict
+make train        # dataset + treino + metadados
+make evaluate     # reavalia o modelo salvo
+make up / down    # docker compose (api + postgres/pgvector)
 ```
 
-Uma regra crítica pode sobrepor o modelo:
+### Docker
 
-```python
-if red_flag_detected:
-    route = "emergency_flow"
-```
+`docker compose up --build` sobe a API e o PostgreSQL com pgvector habilitado (o banco ainda não é usado pela API — Fase F). O Ollama continua no host e é acessado em `http://host.docker.internal:11434/v1`; `models/` é montado como volume somente leitura (rode `make train` antes).
 
-### Fluxo da Etapa 1
+Se a API no contêiner responder 503 para o relato, o contêiner provavelmente não alcança o Ollama do host: verifique se o Ollama escuta em `0.0.0.0` (`OLLAMA_HOST=0.0.0.0`) e se o firewall do host (ex.: `ufw`) permite a rede do Docker na porta 11434.
 
-```text
-LOGIN
-  ↓
-IDENTIDADE / PRONTUÁRIO AUTORIZADO
-  ↓
-"O que você está sentindo?"
-  ↓
-LLM extrai dados estruturados
-  ↓
-Safety Agent
-  ↓
-Machine Learning
-  ↓
-Care Routing Agent
-  ↓
-Regras do SUS
-  ↓
-Agent Harness valida a rota
-  ↓
-UBS / UPA / Hospital / Emergência
-  ↓
-Geolocalização
-  ↓
-Unidade adequada mais próxima
-  ↓
-Resposta ao usuário
-```
+## Etapas do projeto
 
-### Limite do sistema
+1. **Etapa 1 — Encaminhamento inteligente** (em andamento; fases A–E implementadas): Agent Harness + ML + regras + geolocalização.
+2. **Etapa 2 — Medicamentos no SUS** (planejado): `MedicationAgent` + RAG sobre fontes oficiais + localização. Respostas sempre com fonte; o LLM não pode inventar disponibilidade.
+3. **Etapa 3 — Planos de saúde** (planejado): `InsuranceAgent` + `ProviderAgent` com dados verificáveis de cobertura e rede do **produto** contratado.
 
-O sistema deve responder:
+## Dados e privacidade
 
-> "Com as informações fornecidas, o encaminhamento indicado pelo sistema é procurar atendimento de urgência."
+- O prontuário completo **nunca** é enviado ao LLM; o LLM recebe apenas o relato.
+- O Context Builder aplica minimização de dados antes do ML e das regras.
+- Logs registram etapa, duração, status e `request_id` — nunca o relato, prompts ou o prontuário.
+- Todos os dados de pacientes, unidades e treino são **sintéticos/fictícios**.
+- Futuro: PostgreSQL para dados estruturados; pgvector apenas para documentos (protocolos, regras, manuais), não para o prontuário.
 
-E não:
+## Stack
 
-> "Você tem pneumonia."
-
----
-
-## Etapa 2 — Medicamentos no SUS
-
-Depois do roteamento assistencial, o Health-flow passa a responder questões como:
-
-- O SUS disponibiliza este medicamento?
-- Ele faz parte da relação aplicável?
-- Quais são os critérios de acesso?
-- Precisa de receita ou documentação específica?
-- Onde o usuário pode tentar obter o medicamento?
-- Qual unidade ou farmácia vinculada está mais próxima?
-
-Fluxo:
-
-```text
-Usuário pergunta pelo medicamento
-        ↓
-Medication Agent
-        ↓
-RAG + fontes oficiais + APIs/bases disponíveis
-        ↓
-verificação de disponibilidade/regras
-        ↓
-geolocalização
-        ↓
-local de acesso mais adequado
-        ↓
-resposta com fonte
-```
-
-O LLM não deve inventar cobertura ou disponibilidade de medicamento. A resposta precisa estar ligada a uma fonte verificável.
-
----
-
-## Etapa 3 — Planos de saúde
-
-A terceira etapa adiciona saúde suplementar.
-
-O usuário poderá informar ou vincular seu plano e perguntar:
-
-- Meu plano cobre este hospital?
-- Este hospital faz parte da minha rede?
-- Meu plano cobre determinada especialidade?
-- Quais especialistas da minha rede existem perto de mim?
-- Preciso de autorização?
-- Qual unidade da rede é mais próxima?
-
-Fluxo:
-
-```text
-Usuário / plano vinculado
-        ↓
-Insurance Agent
-        ↓
-produto/plano específico
-        ↓
-cobertura + rede credenciada
-        ↓
-especialidade / hospital / serviço
-        ↓
-geolocalização
-        ↓
-opções mais adequadas
-        ↓
-resposta
-```
-
-Não basta conhecer a operadora. O sistema deve considerar o produto/plano específico e as informações verificáveis da rede.
-
----
-
-## Arquitetura resumida
-
-```text
-                        HEALTH-FLOW
-
-                            Usuário
-                              |
-                            Login
-                              |
-                    Prontuário autorizado
-                              |
-                              v
-                       Agent Harness
-                              |
-          +-------------------+-------------------+
-          |                   |                   |
-          v                   v                   v
-         LLM                 ML                Regras
-          |                   |              de segurança
-          +-------------------+-------------------+
-                              |
-                              v
-                    Care Routing Agent
-                              |
-                regras / conhecimento SUS
-                              |
-        +---------------------+---------------------+
-        |                     |                     |
-       UBS                   UPA               Emergência
-        |                     |                     |
-        +---------- Geolocalização -----------------+
-                              |
-                              v
-                        Resposta final
-```
-
-Mais detalhes em [docs/architecture.md](docs/architecture.md).
-
-## Dados e RAG
-
-O prontuário não deve ser armazenado apenas em banco vetorial.
-
-### PostgreSQL
-
-Para dados estruturados:
-
-- usuários;
-- consentimentos;
-- medicamentos ativos;
-- alergias;
-- condições registradas;
-- atendimentos;
-- exames estruturados;
-- plano;
-- auditoria.
-
-### PostgreSQL + pgvector
-
-Para RAG e busca semântica:
-
-- protocolos;
-- regras do SUS;
-- documentação de medicamentos;
-- documentos administrativos;
-- regras de planos;
-- conteúdo oficial não estruturado.
-
-### Object Storage
-
-Para arquivos originais:
-
-- PDFs;
-- laudos;
-- documentos;
-- imagens.
+Python 3.12 · FastAPI · Pydantic v2 · pydantic-settings · OpenAI SDK (contra Ollama) · scikit-learn · joblib · pytest · ruff · mypy · Docker Compose · PostgreSQL + pgvector (provisionado). Planejado: SQLAlchemy 2, Alembic, Redis.
 
 ## Princípios
 
-- Não diagnosticar.
-- Não prescrever.
-- Não alterar tratamento.
-- ML auxilia o encaminhamento; não faz diagnóstico.
-- Emergências têm prioridade.
-- O LLM não decide sozinho.
-- O resultado deve ser auditável.
-- O prontuário completo não deve ser enviado ao LLM por padrão.
-- Dados clínicos só podem ser usados quando necessários e autorizados.
-- Informações de medicamentos e planos devem vir de fontes verificáveis.
-
-## Stack inicial sugerida
-
-```text
-Frontend: React / Next.js
-Backend: Python + FastAPI
-Agent orchestration: Agent Harness
-LLM: OpenAI
-Machine Learning: Python + scikit-learn
-Banco: PostgreSQL
-Vector DB: pgvector
-RAG: embeddings + retrieval
-Cache: Redis
-Arquivos: S3 / Object Storage
-```
-
-## Status
-
-O desenvolvimento começa pela **Etapa 1: Agent Harness + Machine Learning + encaminhamento assistencial**.
+- Não diagnosticar, não prescrever, não alterar tratamento.
+- O LLM não decide; o ML não é autoridade em casos críticos; regras de segurança sempre prevalecem.
+- Emergências têm prioridade; nenhuma integração é simulada como se fosse real.
+- Resultado auditável por `reason_codes` e `request_id`.
