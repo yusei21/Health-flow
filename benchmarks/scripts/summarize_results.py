@@ -24,6 +24,11 @@ COLUMNS = (
 )
 
 
+def _short_commit(commit: str) -> str:
+    # Keep the -dirty marker visible: such runs must not be cited.
+    return commit[:12] + (" (dirty)" if commit.endswith("-dirty") else "")
+
+
 def summarize(directory: Path) -> str:
     lines = ["| " + " | ".join(COLUMNS) + " |", "|" + "---|" * len(COLUMNS)]
     for path in sorted(directory.glob("*.json")):
