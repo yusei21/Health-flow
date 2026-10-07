@@ -1,5 +1,6 @@
 """Live location lookup using real OpenStreetMap data (not official CNES)."""
 import logging
+
 import httpx
 from app.core.exceptions import FacilityProviderError
 from app.schemas.care import ServiceType
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class OpenStreetMapFacilityProvider:
     def __init__(self, endpoint: str = "https://overpass-api.de/api/interpreter") -> None:
-        self.endpoint = endpoint
+        self.endpoints = (endpoint, "https://overpass.kumi.systems/api/interpreter")
 
     async def find_nearby(
         self, service_type: ServiceType, latitude: float, longitude: float, radius_km: float
@@ -23,14 +24,24 @@ class OpenStreetMapFacilityProvider:
             f'nwr(around:{radius},{latitude},{longitude})["name"~"UPA|UBS|Pronto Atendimento|Pronto Socorro|Unidade B[aá]sica",i];'
             ");out center;"
         )
-        try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                response = await client.post(self.endpoint, data={"data": query})
-                response.raise_for_status()
-                elements = response.json()["elements"]
-        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
-            logger.warning("osm_lookup_failed", extra={"error_type": type(exc).__name__})
-            raise FacilityProviderError("geographic provider unavailable") from exc
+        elements = None
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            for endpoint in self.endpoints:
+                try:
+                    response = await client.post(endpoint, data={"data": query})
+                    response.raise_for_status()
+                    payload = response.json()
+                    if not isinstance(payload.get("elements"), list):
+                        raise ValueError("missing elements")
+                    elements = payload["elements"]
+                    break
+                except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                    logger.warning(
+                        "osm_lookup_endpoint_failed",
+                        extra={"endpoint": endpoint, "error_type": type(exc).__name__},
+                    )
+        if elements is None:
+            raise FacilityProviderError("all geographic providers unavailable")
 
         matches = []
         seen = set()
