@@ -1,162 +1,347 @@
 # Health-flow
 
-> **PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS.**
+Health-flow é um sistema de navegação em saúde que recebe o relato do usuário, interpreta os sintomas com IA local, combina regras de segurança com Machine Learning e indica o tipo de atendimento mais adequado. A interface também pode usar a localização do próprio usuário, com permissão do navegador, para ajudar a encontrar uma unidade compatível próxima.
 
-Projeto acadêmico de Inteligência Artificial para navegação assistencial no SUS e, em etapas posteriores, consulta de medicamentos e cobertura de planos de saúde.
+O sistema não faz diagnóstico, não prescreve medicamentos e não aciona ambulâncias. Em uma possível emergência, a orientação pode incluir contato com o SAMU pelo 192.
 
-O Health-flow **não diagnostica, não prescreve e não substitui profissionais de saúde**. Ele recebe o relato do usuário, estrutura as informações, aplica regras de segurança e usa **Agent Harness + Machine Learning** para indicar o **tipo de serviço** adequado e a unidade compatível mais próxima.
-
-Em possível emergência, orienta ligar para o **SAMU 192**. O sistema **não aciona ambulância** — não existe integração com a regulação.
-
-## Como funciona (Etapa 1)
+## Como o sistema funciona
 
 ```text
-Login → prontuário autorizado → relato em texto livre
-  → LLM local (Ollama) extrai sintomas estruturados
-  → Context Builder seleciona só o contexto clínico relevante
-  → Safety Engine aplica regras determinísticas (pode impor piso de atendimento)
-  → Machine Learning sugere o nível (pulado se houver red flag)
-  → Care Routing combina: nunca abaixo do piso de segurança
-  → tipo de serviço (UBS | UPA | pronto-socorro + SAMU 192)
-  → unidade compatível mais próxima (dados simulados)
-  → resposta com próximo passo e aviso
+Usuário descreve o que está sentindo
+        ↓
+Geolocalização do navegador (com permissão)
+        ↓
+Autonomous Agent Harness
+        ↓
+Safety Engine
+        ↓
+LLM local (Qwen3 via Ollama)
+        ↓
+Contexto mínimo do paciente
+        ↓
+Machine Learning
+        ↓
+Care Routing
+        ↓
+Busca de unidade compatível
+        ↓
+Resposta para o usuário
 ```
 
-| Peça | Papel |
-|---|---|
-| **LLM** (`qwen3:4b` via Ollama) | entende linguagem natural → JSON validado |
-| **Machine Learning** (scikit-learn) | classificação probabilística auxiliar |
-| **Safety Engine** | regras críticas com ID; sempre prevalece |
-| **Agent Harness** | escolhe a próxima ação num conjunto fechado; a *policy* de segurança valida cada passo |
-| **Tools** | busca de unidades (provider simulado) |
+O Agent Harness escolhe dinamicamente a próxima ação dentro de um conjunto fechado de ações permitidas. As regras de segurança têm prioridade sobre o LLM e sobre o modelo de Machine Learning.
 
-Detalhes: [docs/architecture.md](docs/architecture.md) · ML (pipelines, modelos, métricas, limitações): [docs/machine-learning.md](docs/machine-learning.md) · Dados (sintético, MIMIC-IV-ED, Triagegeist, domain shift): [docs/datasets.md](docs/datasets.md)
+## Principais componentes
 
-## Executando
+- **Frontend:** React + TypeScript + Vite.
+- **API:** FastAPI.
+- **LLM local:** Qwen3 4B executado pelo Ollama.
+- **Machine Learning:** scikit-learn.
+- **Rede neural:** MLPClassifier como modelo experimental.
+- **Agent Harness:** planner + policy + executor + estado.
+- **Safety Engine:** regras determinísticas de segurança.
+- **Geolocalização:** Browser Geolocation API.
+- **Banco preparado:** PostgreSQL + pgvector.
+- **Benchmarks:** experimentos reproduzíveis para modelos de ML.
 
-Pré-requisitos: Python 3.12, [uv](https://docs.astral.sh/uv/), [Ollama](https://ollama.com) com o modelo baixado.
+## Requisitos
+
+Instale antes:
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- [Ollama](https://ollama.com/)
+- Node.js + npm
+- Git
+
+## 1. Clonar o projeto
 
 ```bash
-ollama pull qwen3:4b          # uma vez; não é baixado automaticamente
-cp .env.example .env          # ajuste HEALTHFLOW_DEMO_AUTH_TOKEN
-make install                  # uv sync
-make train                    # dataset sintético + treino → models/synthetic-v1/
-make dev                      # API em http://localhost:8000 (docs em /docs)
+git clone https://github.com/yusei21/Health-flow.git
+cd Health-flow
 ```
 
-Exemplo:
+## 2. Preparar o Ollama
+
+Baixe o modelo usado pelo projeto:
 
 ```bash
-curl -s -X POST localhost:8000/api/v1/routing \
-  -H "Authorization: Bearer $HEALTHFLOW_DEMO_AUTH_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"message":"estou com dor forte no peito e falta de ar há 20 minutos","latitude":-23.55,"longitude":-46.64}'
+ollama pull qwen3:4b
 ```
 
-```json
-{
-  "request_id": "39642a51-…",
-  "care_level": "EMERGENCY",
-  "recommended_service_type": "EMERGENCY_ROOM",
-  "facility": {"name": "Pronto-Socorro Exemplo (SIMULADA)", "distance_km": 3.06, "is_simulated": true, "...": "..."},
-  "next_step": "Ligue 192 (SAMU) ou dirija-se imediatamente a um pronto-socorro.",
-  "emergency_guidance": "Possível situação de emergência. Ligue imediatamente para o SAMU 192. Este sistema NÃO aciona ambulância automaticamente.",
-  "reason_codes": ["SAFETY_RULE:RED_FLAG_001", "SAFETY_RULE:RED_FLAG_006", "SAFETY_RULE:CAUTION_001", "SAFETY_OVERRIDE"],
-  "safety_override": true,
-  "disclaimer": "Health-flow fornece orientação de navegação em saúde e não substitui avaliação profissional. Em caso de emergência, ligue 192 (SAMU)."
-}
+Confirme que o Ollama está funcionando:
+
+```bash
+ollama list
+curl http://127.0.0.1:11434/api/tags
 ```
 
-### Interface web (demonstração)
+O backend usa por padrão:
 
-Um frontend temporário (React + TypeScript + Vite, em `frontend/`) consome `POST /api/v1/routing`.
+```text
+http://localhost:11434/v1
+```
 
-No `.env` do backend, habilite o CORS para o Vite (somente desenvolvimento):
+## 3. Configurar o backend
+
+Crie o arquivo de ambiente:
+
+```bash
+cp .env.example .env
+```
+
+Edite o `.env` e defina um token de demonstração, por exemplo:
+
+```bash
+HEALTHFLOW_DEMO_AUTH_TOKEN=local-dev-token-1234567890
+```
+
+Para permitir o frontend local:
 
 ```bash
 HEALTHFLOW_CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
 ```
 
-```bash
-# Terminal 1
-make dev
+Instale as dependências:
 
-# Terminal 2
+```bash
+make install
+```
+
+## 4. Treinar o modelo usado pela API
+
+O modelo de Machine Learning não é treinado quando a API inicia. Gere o dataset sintético e treine antes:
+
+```bash
+make train
+```
+
+O modelo utilizado pela API é salvo em:
+
+```text
+models/synthetic-v1/
+```
+
+O treinamento compara modelos como:
+
+- Logistic Regression
+- Decision Tree
+- Random Forest
+- MLP Neural Network
+
+Os resultados dos experimentos ficam em:
+
+```text
+benchmarks/results/
+```
+
+## 5. Rodar o backend
+
+Em um terminal:
+
+```bash
+make dev
+```
+
+A API ficará disponível em:
+
+```text
+http://127.0.0.1:8000
+```
+
+Swagger:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+## 6. Rodar o frontend
+
+Abra outro terminal:
+
+```bash
 cd frontend
-cp .env.example .env   # VITE_DEMO_TOKEN = mesmo valor de HEALTHFLOW_DEMO_AUTH_TOKEN
+cp .env.example .env
 npm install
 npm run dev
 ```
 
-Abra <http://localhost:5173>. (Alternativas: `make dev-backend` / `make dev-frontend`, ou `make dev-all` em um único terminal.)
-
-- Ao clicar em **Usar minha localização**, o navegador pede permissão. A leitura é única (`getCurrentPosition`, sem `watchPosition`); latitude/longitude ficam apenas em memória e são enviadas somente ao backend.
-- A API exige latitude/longitude; sem localização o botão **Buscar atendimento** fica desabilitado. Nenhuma coordenada fictícia é usada.
-- A Geolocation API só funciona em **contexto seguro**: `localhost` em desenvolvimento ou **HTTPS** em produção. Um IP de rede (`http://192.168.x.x:5173`) não terá acesso à localização.
-- Testar no celular (Android + Chrome): conecte via USB com depuração ativa, rode `adb reverse tcp:5173 tcp:5173 && adb reverse tcp:8000 tcp:8000` e abra `http://localhost:5173` no celular. Fora disso, sirva o frontend e a API por HTTPS.
-- `VITE_DEMO_TOKEN` é embutido no bundle do navegador: use apenas o token de demonstração, nunca um segredo real. `frontend/.env` não é versionado.
-- Testes e build: `cd frontend && npm test && npm run build`.
-
-### Rotas
-
-| Método | Rota | Auth |
-|---|---|---|
-| GET | `/health` | não |
-| POST | `/api/v1/routing` | Bearer |
-| GET | `/api/v1/patients/me` | Bearer |
-
-A autenticação atual é um **token de demonstração** ligado a um paciente **fictício**; é recusada quando `HEALTHFLOW_APP_ENV=production`.
-
-### Comandos
+No `frontend/.env`, use o mesmo token configurado no backend:
 
 ```bash
-make test         # pytest (não precisa do Ollama)
-make test-ollama  # teste de integração real com o Ollama local
-make lint         # ruff check + format --check
-make format
-make typecheck    # mypy --strict
-make train        # = train-synthetic (modelo usado pela API)
-make evaluate     # = evaluate-synthetic (só no teste reservado)
-
-# Experimentos de ML (ver docs/machine-learning.md e docs/datasets.md)
-make dataset-synthetic / train-synthetic / evaluate-synthetic
-make dataset-mimic     # requer data/raw/mimic-iv-ed/triage.csv(.gz) — acesso credenciado PhysioNet
-make train-mimic       # → models/mimic-structured-v1/ + benchmarks/results/*.json
-make evaluate-mimic
-make dataset-triagegeist # requer data/raw/triagegeist/train.csv — download manual do Kaggle
-make train-triagegeist   # → models/triagegeist-structured-v1/ (não usado pela API)
-make evaluate-triagegeist
-make benchmark-ml      # roda A sempre; MIMIC/Triagegeist se o dataset processado existir
-make benchmark-summary # tabela Markdown dos resultados
-make up / down    # docker compose (api + postgres/pgvector)
+VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_DEMO_TOKEN=local-dev-token-1234567890
 ```
 
-### Docker
+Abra:
 
-`docker compose up --build` sobe a API e o PostgreSQL com pgvector habilitado (o banco ainda não é usado pela API — Fase F). O Ollama continua no host e é acessado em `http://host.docker.internal:11434/v1`; `models/` é montado como volume somente leitura e a API usa `models/synthetic-v1` (rode `make train` antes).
+```text
+http://localhost:5173
+```
 
-Se a API no contêiner responder 503 para o relato, o contêiner provavelmente não alcança o Ollama do host: verifique se o Ollama escuta em `0.0.0.0` (`OLLAMA_HOST=0.0.0.0`) e se o firewall do host (ex.: `ufw`) permite a rede do Docker na porta 11434.
+## Uso básico
 
-## Etapas do projeto
+1. Abra o frontend.
+2. Escreva o que está sentindo.
+3. Clique em **Usar minha localização**.
+4. Autorize o navegador a acessar a localização.
+5. Clique em **Buscar atendimento**.
+6. O frontend envia relato + latitude + longitude para o backend.
+7. O Agent Harness executa o fluxo necessário.
+8. O resultado mostra o nível de atendimento, tipo de serviço e unidade encontrada quando disponível.
 
-1. **Etapa 1 — Encaminhamento inteligente** (em andamento; fases A–E implementadas): Agent Harness + ML + regras + geolocalização.
-2. **Etapa 2 — Medicamentos no SUS** (planejado): `MedicationAgent` + RAG sobre fontes oficiais + localização. Respostas sempre com fonte; o LLM não pode inventar disponibilidade.
-3. **Etapa 3 — Planos de saúde** (planejado): `InsuranceAgent` + `ProviderAgent` com dados verificáveis de cobertura e rede do **produto** contratado.
+## Geolocalização
 
-## Dados e privacidade
+A localização é obtida pelo navegador usando:
 
-- O prontuário completo **nunca** é enviado ao LLM; o LLM recebe apenas o relato.
-- O Context Builder aplica minimização de dados antes do ML e das regras.
-- Logs registram etapa, duração, status e `request_id` — nunca o relato, prompts ou o prontuário.
-- Todos os dados de pacientes, unidades e treino são **sintéticos/fictícios**.
-- Futuro: PostgreSQL para dados estruturados; pgvector apenas para documentos (protocolos, regras, manuais), não para o prontuário.
+```javascript
+navigator.geolocation.getCurrentPosition(...)
+```
 
-## Stack
+O usuário precisa autorizar o acesso. O projeto não usa rastreamento contínuo e não utiliza `watchPosition`.
 
-Python 3.12 · FastAPI · Pydantic v2 · pydantic-settings · OpenAI SDK (contra Ollama) · scikit-learn · joblib · pytest · ruff · mypy · Docker Compose · PostgreSQL + pgvector (provisionado). Planejado: SQLAlchemy 2, Alembic, Redis.
+A localização funciona em contexto seguro:
 
-## Princípios
+- `localhost` durante desenvolvimento;
+- HTTPS em produção.
 
-- Não diagnosticar, não prescrever, não alterar tratamento.
-- O LLM não decide; o ML não é autoridade em casos críticos; regras de segurança sempre prevalecem.
-- Emergências têm prioridade; nenhuma integração é simulada como se fosse real.
-- Resultado auditável por `reason_codes` e `request_id`.
+As coordenadas são utilizadas para a busca de unidades e não devem ser armazenadas em `localStorage` nem enviadas para serviços de analytics.
+
+## Testar pelo terminal
+
+Exemplo de chamada direta para a API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/routing \
+  -H 'Authorization: Bearer local-dev-token-1234567890' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": "estou com tosse e coriza há 4 dias",
+    "latitude": -23.55,
+    "longitude": -46.64
+  }'
+```
+
+## Comandos úteis
+
+```bash
+make dev                  # inicia a API
+make test                 # testes Python
+make test-ollama          # teste real com Ollama
+make lint                 # lint
+make typecheck            # mypy
+make train                # treina o modelo usado pela API
+make evaluate             # avalia o modelo
+
+make dataset-synthetic
+make train-synthetic
+make evaluate-synthetic
+
+make dataset-mimic
+make train-mimic
+make evaluate-mimic
+
+make dataset-triagegeist
+make train-triagegeist
+make evaluate-triagegeist
+
+make benchmark-ml
+make benchmark-summary
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+npm test
+npm run build
+```
+
+## Estrutura principal
+
+```text
+Health-flow/
+├── app/
+│   ├── agents/
+│   ├── api/
+│   ├── harness/
+│   ├── llm/
+│   ├── ml/
+│   ├── safety/
+│   └── tools/
+├── frontend/
+├── tests/
+├── data/
+├── models/
+├── benchmarks/
+├── docs/
+├── Makefile
+└── docker-compose.yml
+```
+
+## Agent Harness
+
+O Harness atual é autônomo e orientado a estado. Ele é composto por:
+
+```text
+AutonomousHealthFlowHarness
+├── Planner
+├── Policy
+├── Executor
+├── HarnessState
+└── termination guards
+```
+
+O planner escolhe o próximo passo permitido de acordo com o estado atual. A policy impede ações inválidas, e o Safety Engine mantém prioridade sobre qualquer decisão de ML ou LLM.
+
+## Machine Learning e datasets
+
+O projeto possui suporte para:
+
+- dataset sintético reproduzível;
+- MIMIC-IV-ED;
+- Triagegeist;
+- Logistic Regression;
+- Decision Tree;
+- Random Forest;
+- MLP Neural Network.
+
+Os datasets reais não são incluídos no repositório.
+
+Mais detalhes:
+
+- [Arquitetura](docs/architecture.md)
+- [Machine Learning](docs/machine-learning.md)
+- [Datasets](docs/datasets.md)
+
+## Docker
+
+Para subir a API e PostgreSQL/pgvector:
+
+```bash
+docker compose up --build
+```
+
+O Ollama continua rodando no host.
+
+Antes de iniciar via Docker, rode:
+
+```bash
+make train
+```
+
+para gerar o modelo usado pela API.
+
+## Observações
+
+- O LLM recebe somente o relato necessário para interpretar os sintomas.
+- O modelo de ML auxilia o encaminhamento, mas não tem autoridade sobre as regras críticas de segurança.
+- O sistema orienta sobre atendimento; não substitui avaliação profissional.
+- Em uma possível emergência, siga a orientação apresentada e utilize o SAMU 192 quando indicado.
