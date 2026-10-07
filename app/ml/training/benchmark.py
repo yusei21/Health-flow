@@ -16,6 +16,7 @@ class BenchmarkRecord(BaseModel):
     run_id: str
     timestamp: str
     git_commit: str
+    git_dirty: bool
     experiment: str
     dataset_name: str
     dataset_version: str
@@ -36,6 +37,7 @@ class BenchmarkRecord(BaseModel):
     cross_validation_metrics: ClassificationMetrics
     test_metrics: ClassificationMetrics
     training_time_seconds: float
+    inference_time_seconds: float  # whole held-out test set
     inference_time_ms_per_row: float
 
 

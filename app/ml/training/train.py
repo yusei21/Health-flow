@@ -3,6 +3,7 @@
 Never runs inside the API. Usage:
     python -m app.ml.training.train --experiment synthetic_baseline
     python -m app.ml.training.train --experiment structured_mimic_baseline
+    python -m app.ml.training.train --experiment structured_triagegeist_baseline
 
 Protocol: split train/test (grouped by patient when available) → cross-validate each
 candidate on the training part only → select by CV → fit on the training part →
@@ -126,6 +127,7 @@ class CandidateResult:
     cv_metrics: ClassificationMetrics
     test_metrics: ClassificationMetrics
     training_time_seconds: float
+    inference_time_seconds: float
     inference_time_ms_per_row: float
 
 
@@ -178,7 +180,7 @@ def _evaluate_candidate(
     training_time = time.perf_counter() - started
     started = time.perf_counter()
     test_pred = fitted.predict(data.features[test_idx])
-    inference_ms = (time.perf_counter() - started) * 1000 / max(len(test_idx), 1)
+    inference_time = time.perf_counter() - started
 
     return CandidateResult(
         name=name,
@@ -186,7 +188,8 @@ def _evaluate_candidate(
         cv_metrics=compute_metrics(y_train, cv_pred),
         test_metrics=compute_metrics(data.labels[test_idx], test_pred),
         training_time_seconds=round(training_time, 3),
-        inference_time_ms_per_row=round(inference_ms, 5),
+        inference_time_seconds=round(inference_time, 4),
+        inference_time_ms_per_row=round(inference_time * 1000 / max(len(test_idx), 1), 5),
     )
 
 
@@ -255,6 +258,7 @@ def run_experiment(
                 run_id=run_id,
                 timestamp=started_at.isoformat(),
                 git_commit=commit,
+                git_dirty=commit.endswith("-dirty"),
                 experiment=experiment.name,
                 dataset_name=dataset.info.name,
                 dataset_version=dataset.info.version,
@@ -275,6 +279,7 @@ def run_experiment(
                 cross_validation_metrics=result.cv_metrics,
                 test_metrics=result.test_metrics,
                 training_time_seconds=result.training_time_seconds,
+                inference_time_seconds=result.inference_time_seconds,
                 inference_time_ms_per_row=result.inference_time_ms_per_row,
             ),
             benchmark_dir,
