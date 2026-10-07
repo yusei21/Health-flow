@@ -1,6 +1,7 @@
 .PHONY: install dev test test-ollama lint format typecheck check up down \
 	dataset train evaluate dataset-synthetic train-synthetic evaluate-synthetic \
-	dataset-mimic train-mimic evaluate-mimic benchmark-ml benchmark-summary
+	dataset-mimic train-mimic evaluate-mimic dataset-triagegeist train-triagegeist \
+	evaluate-triagegeist benchmark-ml benchmark-summary
 
 install:
 	uv sync
@@ -33,6 +34,11 @@ MIMIC_TRIAGE ?= data/raw/mimic-iv-ed
 MIMIC_SOURCE_VERSION ?= unspecified
 MIMIC_DATASET ?= data/processed/routing_mimic_v1.csv
 MIMIC_MODEL_DIR ?= models/mimic-structured-v1
+# Kaggle Triagegeist: downloaded manually (never by this Makefile, no Kaggle credentials).
+TRIAGEGEIST_RAW ?= data/raw/triagegeist
+TRIAGEGEIST_SOURCE_VERSION ?= unspecified
+TRIAGEGEIST_DATASET ?= data/processed/routing_triagegeist_v1.csv
+TRIAGEGEIST_MODEL_DIR ?= models/triagegeist-structured-v1
 BENCHMARK_DIR ?= benchmarks/results
 TRAIN = uv run python -m app.ml.training.train --benchmark-dir $(BENCHMARK_DIR)
 EVALUATE = uv run python -m app.ml.training.evaluate
@@ -58,10 +64,25 @@ evaluate-mimic:
 	$(EVALUATE) --experiment structured_mimic_baseline --dataset $(MIMIC_DATASET) \
 		--model-dir $(MIMIC_MODEL_DIR)
 
-# Experiment A always; experiment B only when the processed MIMIC dataset exists.
+dataset-triagegeist:
+	uv run python -m app.ml.training.prepare_triagegeist --input $(TRIAGEGEIST_RAW) \
+		--output $(TRIAGEGEIST_DATASET) --source-version $(TRIAGEGEIST_SOURCE_VERSION)
+
+train-triagegeist:
+	$(TRAIN) --experiment structured_triagegeist_baseline --dataset $(TRIAGEGEIST_DATASET) \
+		--model-dir $(TRIAGEGEIST_MODEL_DIR)
+
+evaluate-triagegeist:
+	$(EVALUATE) --experiment structured_triagegeist_baseline --dataset $(TRIAGEGEIST_DATASET) \
+		--model-dir $(TRIAGEGEIST_MODEL_DIR)
+
+# Experiment A always; MIMIC and Triagegeist only when their processed datasets exist.
 benchmark-ml: train-synthetic
 	@if [ -f $(MIMIC_DATASET) ]; then $(MAKE) train-mimic; \
 	else echo "skipping MIMIC: $(MIMIC_DATASET) not found (run make dataset-mimic)"; fi
+	@if [ -f $(TRIAGEGEIST_DATASET) ]; then $(MAKE) train-triagegeist; \
+	else echo "skipping Triagegeist: $(TRIAGEGEIST_DATASET) not found" \
+		"(run make dataset-triagegeist)"; fi
 
 benchmark-summary:
 	uv run python benchmarks/scripts/summarize_results.py $(BENCHMARK_DIR)

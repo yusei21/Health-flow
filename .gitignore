@@ -18,6 +18,11 @@ data/raw/mimic*/
 data/raw/mimic-iv-ed*/
 *.csv.gz
 
+# Kaggle Triagegeist — downloaded manually, never commit or redistribute; no Kaggle tokens
+data/raw/triagegeist/
+kaggle.json
+.kaggle/
+
 # Generated artifacts (reproducible with `make train`)
 models/*
 !models/.gitkeep
