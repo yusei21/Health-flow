@@ -6,13 +6,13 @@ import pytest
 
 from app.core.exceptions import MLInferenceError, MLModelUnavailableError
 from app.ml.classifier import METADATA_FILENAME, MODEL_FILENAME, RoutingClassifier
-from app.ml.inference import RoutingInferenceService
-from app.ml.training.dataset import (
+from app.ml.data.synthetic import (
     DATA_DISCLAIMER,
     generate_examples,
     load_dataset,
     save_dataset,
 )
+from app.ml.inference import RoutingInferenceService
 from app.schemas.care import CareLevel
 from app.schemas.patient import AgeRange, PatientContext
 from app.schemas.symptoms import Severity, Symptom, SymptomExtraction
@@ -42,11 +42,39 @@ def test_load_dataset_rejects_wrong_schema(tmp_path: Path) -> None:
 
 def test_metadata_contains_required_fields(trained_model_dir: Path) -> None:
     meta = json.loads((trained_model_dir / METADATA_FILENAME).read_text())
-    for key in ("model_type", "features", "training_date", "metrics", "version", "dataset_version"):
+    required = (
+        "experiment",
+        "dataset_name",
+        "dataset_version",
+        "feature_set",
+        "features",
+        "split_strategy",
+        "number_of_rows",
+        "number_of_patients",
+        "model_type",
+        "model_version",
+        "hyperparameters",
+        "metrics",
+        "training_date",
+        "git_commit",
+        "artifact_sha256",
+        "random_state",
+    )
+    for key in required:
         assert key in meta
+    assert meta["number_of_patients"] is None  # synthetic rows have no patient identity
+    assert meta["split_strategy"].startswith("stratified_row")
     assert meta["data_disclaimer"] == DATA_DISCLAIMER
     held_out = meta["metrics"]["held_out_test"]
-    assert {"accuracy", "macro_f1", "emergency_recall", "confusion_matrix"} <= held_out.keys()
+    assert {
+        "accuracy",
+        "macro_f1",
+        "emergency_recall",
+        "confusion_matrix",
+        "under_triage_rate",
+        "over_triage_rate",
+        "critical_under_triage_rate",
+    } <= held_out.keys()
     assert set(meta["metrics"]["cross_validation"]) == {
         "logistic_regression",
         "decision_tree",

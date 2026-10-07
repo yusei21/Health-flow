@@ -14,9 +14,10 @@ from app.core.exceptions import LLMError
 from app.harness.healthflow_harness import HealthFlowHarness
 from app.llm.schemas import ChatMessage
 from app.ml.classifier import RoutingClassifier
+from app.ml.data.synthetic import generate_examples, save_dataset
+from app.ml.experiments import EXPERIMENTS
 from app.ml.inference import RoutingInferenceService
-from app.ml.training.dataset import generate_examples, save_dataset
-from app.ml.training.train import train
+from app.ml.training.train import run_experiment
 from app.repositories.patients import InMemoryPatientRepository, synthetic_demo_patient
 from app.safety.engine import SafetyEngine
 from app.tools.facilities import MockFacilityProvider, simulated_facilities
@@ -52,7 +53,9 @@ def trained_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("ml")
     dataset = root / "dataset.csv"
     save_dataset(generate_examples(1500, seed=7), dataset)
-    train(dataset, root / "model", dataset_version="test")
+    run_experiment(
+        EXPERIMENTS["synthetic_baseline"], dataset, root / "model", benchmark_dir=root / "bench"
+    )
     return root / "model"
 
 
