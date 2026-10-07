@@ -39,6 +39,7 @@ class BenchmarkRecord(BaseModel):
     training_time_seconds: float
     inference_time_seconds: float  # whole held-out test set
     inference_time_ms_per_row: float
+    training_diagnostics: dict[str, object]  # n_iter, converged, convergence warnings
 
 
 def git_commit() -> str:

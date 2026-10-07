@@ -8,7 +8,7 @@ from typing import Protocol, Self
 import joblib
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.exceptions import MLModelUnavailableError
 from app.ml.feature_builders import FEATURE_BUILDERS
@@ -35,6 +35,8 @@ class ModelMetadata(BaseModel):
     number_of_rows: int
     number_of_patients: int | None
     hyperparameters: dict[str, dict[str, object]]
+    # Iterations/convergence of the final fit; empty for artifacts trained before it existed.
+    training_diagnostics: dict[str, object] = Field(default_factory=dict)
     metrics: TrainingMetrics
     training_date: str
     git_commit: str

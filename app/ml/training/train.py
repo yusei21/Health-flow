@@ -8,7 +8,9 @@ Never runs inside the API. Usage:
 Protocol: split train/test (grouped by patient when available) → cross-validate each
 candidate on the training part only → select by CV → fit on the training part →
 evaluate every candidate once on the held-out test for reporting. The test set never
-influences selection.
+influences selection, early stopping or hyperparameters (the MLP's early-stopping
+validation split is carved out of whatever data `fit` receives: a CV training fold or
+the training part, never the held-out test).
 """
 
 import argparse
@@ -16,6 +18,9 @@ import logging
 import math
 import time
 import uuid
+import warnings
+from collections.abc import Collection, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,9 +30,11 @@ import numpy as np
 from numpy.typing import NDArray
 from sklearn.base import clone
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_predict
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
@@ -103,6 +110,27 @@ def candidate_models(random_state: int = RANDOM_STATE) -> dict[str, Pipeline]:
                 ),
             ]
         ),
+        # Feed-forward neural baseline for tabular data. MLPClassifier has no
+        # class_weight, so unlike the others it is NOT class-balanced (documented).
+        "neural_network_mlp": Pipeline(
+            [
+                ("impute", _imputer()),
+                ("scale", StandardScaler()),
+                (
+                    "model",
+                    MLPClassifier(
+                        hidden_layer_sizes=(64, 32),
+                        activation="relu",
+                        solver="adam",
+                        max_iter=500,
+                        early_stopping=True,
+                        validation_fraction=0.1,
+                        n_iter_no_change=20,
+                        random_state=random_state,
+                    ),
+                ),
+            ]
+        ),
     }
 
 
@@ -117,7 +145,49 @@ def _json_safe(value: object) -> object:
     # NaN/inf (e.g. SimpleImputer.missing_values) would produce invalid JSON.
     if isinstance(value, float) and not math.isfinite(value):
         return repr(value)
+    if isinstance(value, tuple | list):
+        return [_json_safe(item) for item in value]
     return value if value is None or isinstance(value, bool | int | float | str) else repr(value)
+
+
+@contextmanager
+def _record_convergence_warnings() -> Iterator[list[str]]:
+    """Collect ConvergenceWarning messages so they are recorded, not hidden.
+
+    Any other warning is re-emitted unchanged.
+    """
+    messages: list[str] = []
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        yield messages
+    for warning in caught:
+        if issubclass(warning.category, ConvergenceWarning):
+            messages.append(str(warning.message))
+        else:
+            warnings.warn_explicit(
+                warning.message, warning.category, warning.filename, warning.lineno
+            )
+
+
+def training_diagnostics(
+    model: Pipeline, fit_warnings: list[str], cv_warnings: list[str]
+) -> dict[str, object]:
+    """Iterations and convergence of the final fit (iterative estimators only)."""
+    estimator = model.named_steps["model"]
+    diagnostics: dict[str, object] = {
+        "converged": not fit_warnings,
+        "convergence_warnings": sorted(set(fit_warnings)),
+        "cv_convergence_warning_count": len(cv_warnings),
+    }
+    if (n_iter := getattr(estimator, "n_iter_", None)) is not None:
+        diagnostics["n_iter"] = int(np.max(n_iter))
+    if isinstance(estimator, MLPClassifier) and estimator.early_stopping:
+        diagnostics["stopped_early"] = estimator.n_iter_ < estimator.max_iter
+        # Accuracy on the internal validation split carved from the training data.
+        diagnostics["best_internal_validation_score"] = round(
+            float(estimator.best_validation_score_), 4
+        )
+    return diagnostics
 
 
 @dataclass(frozen=True)
@@ -129,6 +199,7 @@ class CandidateResult:
     training_time_seconds: float
     inference_time_seconds: float
     inference_time_ms_per_row: float
+    diagnostics: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -173,11 +244,21 @@ def _evaluate_candidate(
     x_train, y_train = data.features[train_idx], data.labels[train_idx]
     groups_train = data.groups[train_idx] if data.groups is not None else None
     folds = list(cv_folds(y_train, groups_train, random_state))
-    cv_pred = cross_val_predict(clone(model), x_train, y_train, cv=folds)
+    with _record_convergence_warnings() as cv_warnings:
+        cv_pred = cross_val_predict(clone(model), x_train, y_train, cv=folds)
 
-    started = time.perf_counter()
-    fitted = clone(model).fit(x_train, y_train)
-    training_time = time.perf_counter() - started
+    with _record_convergence_warnings() as fit_warnings:
+        started = time.perf_counter()
+        fitted = clone(model).fit(x_train, y_train)
+        training_time = time.perf_counter() - started
+    diagnostics = training_diagnostics(fitted, fit_warnings, cv_warnings)
+    if fit_warnings or cv_warnings:
+        logger.warning(
+            "%s did not converge in %d of %d fits (ConvergenceWarning recorded in benchmark)",
+            name,
+            len(fit_warnings) + len(cv_warnings),
+            len(folds) + 1,
+        )
     started = time.perf_counter()
     test_pred = fitted.predict(data.features[test_idx])
     inference_time = time.perf_counter() - started
@@ -190,6 +271,7 @@ def _evaluate_candidate(
         training_time_seconds=round(training_time, 3),
         inference_time_seconds=round(inference_time, 4),
         inference_time_ms_per_row=round(inference_time * 1000 / max(len(test_idx), 1), 5),
+        diagnostics=diagnostics,
     )
 
 
@@ -199,7 +281,11 @@ def run_experiment(
     model_dir: Path,
     benchmark_dir: Path = DEFAULT_BENCHMARK_DIR,
     random_state: int = RANDOM_STATE,
+    models: Collection[str] | None = None,
 ) -> ExperimentResult:
+    """`models` restricts the candidates (default: all of `candidate_models`)."""
+    if models is not None and (unknown := set(models) - set(candidate_models(random_state))):
+        raise ValueError(f"no candidate model named {sorted(unknown)}")
     started_at = datetime.now(UTC)
     run_id = uuid.uuid4().hex
     commit = git_commit()
@@ -219,6 +305,7 @@ def run_experiment(
     candidates = {
         name: _evaluate_candidate(name, model, data, random_state)
         for name, model in candidate_models(random_state).items()
+        if models is None or name in models
     }
     selected = max(candidates, key=lambda name: _selection_key(candidates[name].cv_metrics))
     best = candidates[selected]
@@ -241,6 +328,7 @@ def run_experiment(
         number_of_rows=len(data.labels),
         number_of_patients=dataset.number_of_patients,
         hyperparameters=hyperparameters(best.model),
+        training_diagnostics=best.diagnostics,
         metrics=TrainingMetrics(
             held_out_test=best.test_metrics,
             cross_validation={name: c.cv_metrics for name, c in candidates.items()},
@@ -281,6 +369,7 @@ def run_experiment(
                 training_time_seconds=result.training_time_seconds,
                 inference_time_seconds=result.inference_time_seconds,
                 inference_time_ms_per_row=result.inference_time_ms_per_row,
+                training_diagnostics=result.diagnostics,
             ),
             benchmark_dir,
             started_at,
