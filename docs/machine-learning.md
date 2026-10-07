@@ -68,14 +68,40 @@ baseline acadêmico. A e B/C **não são diretamente comparáveis**: têm rótul
 
 Todos dentro de um `Pipeline` com `SimpleImputer(strategy="median", add_indicator=True)`, ajustado
 **só no treino** de cada *fold*. Ele não altera nada quando não há faltantes, como no sintético.
-Todos usam `class_weight="balanced"` e `random_state=42`.
+Todos usam `random_state=42`.
 
-- `LogisticRegression(max_iter=2000)` com `StandardScaler`
-- `DecisionTreeClassifier(max_depth=6, min_samples_leaf=10)`
-- `RandomForestClassifier(n_estimators=200, max_depth=10, min_samples_leaf=5)`
+| Nome | Pipeline | `class_weight` |
+|---|---|---|
+| `logistic_regression` | imputer → `StandardScaler` → `LogisticRegression(max_iter=2000)` | `balanced` |
+| `decision_tree` | imputer → `DecisionTreeClassifier(max_depth=6, min_samples_leaf=10)` | `balanced` |
+| `random_forest` | imputer → `RandomForestClassifier(n_estimators=200, max_depth=10, min_samples_leaf=5)` | `balanced` |
+| `neural_network_mlp` | imputer → `StandardScaler` → `MLPClassifier(hidden_layer_sizes=(64, 32), activation="relu", solver="adam", max_iter=500, early_stopping=True, validation_fraction=0.1, n_iter_no_change=20)` | **não suportado** |
 
-XGBoost, MLP (`neural_network_mlp`) e busca de hiperparâmetros ficam fora por enquanto. A MLP não existe
-neste branch e não foi adicionada junto com o Triagegeist, para preservar o escopo.
+XGBoost e busca de hiperparâmetros ficam fora por enquanto.
+
+### MLP (`neural_network_mlp`)
+
+O `MLPClassifier` é uma **rede neural feed-forward** (perceptron multicamadas): duas camadas ocultas com
+64 e 32 neurônios ReLU, otimizadas com Adam sobre a entropia cruzada. Aqui ele serve de **baseline neural
+para dados tabulares**, não de modelo de linguagem: recebe exatamente o mesmo vetor de features dos
+outros candidatos. O imputer vem antes porque a MLP não aceita `NaN`, e o `StandardScaler` porque ela é
+sensível à escala.
+
+- **Mesmo protocolo**: mesmo dataset, mesmo *split* treino/teste (por paciente quando há ID), mesmos
+  *folds* de CV, mesmas features, mesmo critério de seleção e mesmo teste reservado.
+- **Early stopping sem tocar no teste**: os 10% de validação interna (`validation_fraction=0.1`) são
+  separados pelo próprio scikit-learn, de forma estratificada, **dos dados passados ao `fit`**: o *fold*
+  de treino na CV, ou a parte de treino no ajuste final. O teste reservado nunca é usado para early
+  stopping, seleção ou ajuste de hiperparâmetros.
+- **Limitação**: essa validação interna é sorteada **por linha**, não por paciente. Visitas de um mesmo
+  paciente podem cair nos dois lados dessa validação interna, o que pode tornar o critério de parada
+  levemente otimista nos datasets com ID de paciente. Isso não afeta o teste reservado.
+- **Sem `class_weight`**: o `MLPClassifier` não oferece `class_weight`. Diferente dos outros, a MLP
+  **não é balanceada por classe**, e isso tende a reduzir o recall de EMERGENCY, que é o critério
+  primário de seleção. Essa diferença precisa ser declarada ao comparar os modelos.
+- **Convergência**: `ConvergenceWarning` não é escondido. A contagem (CV e ajuste final), as mensagens,
+  `n_iter`, `stopped_early` e o score da validação interna ficam em `training_diagnostics`, no benchmark
+  e no `metadata.json`, e um aviso é logado. Não aumentamos `max_iter` para silenciar o aviso.
 
 ## Protocolo de avaliação (sem vazamento)
 
@@ -109,7 +135,8 @@ models/<experimento>/routing_model.joblib
 models/<experimento>/metadata.json   experiment, dataset_name/version, feature_set, features,
                                      split_strategy, number_of_rows, number_of_patients,
                                      model_type, model_version, hyperparameters, metrics,
-                                     training_date, git_commit, artifact_sha256, random_state
+                                     training_date, git_commit, artifact_sha256, random_state,
+                                     training_diagnostics (n_iter, converged, warnings…)
 benchmarks/results/<timestamp>_<experimento>_<modelo>_<run_id>.json
 ```
 
@@ -119,7 +146,11 @@ benchmarks/results/<timestamp>_<experimento>_<modelo>_<run_id>.json
   Arquivos são abertos em modo exclusivo: **nunca sobrescrevem** execuções anteriores.
 - `git_commit` termina em `-dirty` se havia mudanças não commitadas. Para o artigo, rode com a árvore
   limpa.
-- `make benchmark-summary` gera uma tabela Markdown de todos os resultados.
+- `make benchmark-summary` gera uma tabela Markdown de todos os resultados (incluindo accuracy de teste,
+  tempo de treino e `converged`, que é `n/a` para modelos não iterativos e registros antigos).
+- `metadata.json` descreve só o modelo **selecionado**. Os hiperparâmetros e diagnósticos de cada
+  candidato (inclusive da MLP quando ela não é selecionada) ficam no JSON de benchmark com
+  `model_name` correspondente.
 - O artefato `joblib` só é carregado se o SHA-256 bater com `metadata.json` (joblib executa código ao
   desserializar).
 
@@ -128,16 +159,33 @@ benchmarks/results/<timestamp>_<experimento>_<modelo>_<run_id>.json
 **Dados sintéticos: os números medem a recuperação do processo gerador, não a realidade clínica.**
 Os valores exatos estão nos JSON em `benchmarks/results/`.
 
-Validação cruzada (treino, n=3200):
+Execução de referência: `make benchmark-ml`, commit `f0ac6eb` (árvore limpa), registros
+`benchmarks/results/2026-10-07T224326_synthetic_baseline_*_eb0307e7.json`.
+
+Validação cruzada (treino, n=3200), **usada para a seleção**:
 
 | Modelo | Accuracy | Precisão macro | Recall macro | F1 macro | Recall EMERGENCY |
 |---|---|---|---|---|---|
 | Logistic Regression | 0.880 | 0.847 | 0.854 | 0.850 | 0.798 |
 | Decision Tree | 0.854 | 0.829 | 0.843 | 0.833 | 0.799 |
 | **Random Forest** (selecionado pela CV) | 0.900 | 0.881 | 0.884 | 0.881 | 0.826 |
+| MLP (`neural_network_mlp`) | 0.884 | 0.868 | 0.846 | 0.856 | 0.756 |
 
-Teste reservado (n=800), Random Forest: accuracy 0.931 · F1 macro 0.919 · recall EMERGENCY 0.891 ·
-under-triage 0.025 · over-triage 0.044 · critical under-triage 0.109.
+Teste reservado (n=800), **só para relatório**:
+
+| Modelo | Accuracy | F1 macro | Recall EMERGENCY | Under-triage | Over-triage | Critical under-triage | Treino (s) |
+|---|---|---|---|---|---|---|---|
+| Logistic Regression | 0.905 | 0.879 | 0.841 | 0.034 | 0.061 | 0.159 | 0.025 |
+| Decision Tree | 0.871 | 0.848 | 0.804 | 0.040 | 0.089 | 0.196 | 0.010 |
+| **Random Forest** | 0.931 | 0.919 | 0.891 | 0.025 | 0.044 | 0.109 | 0.223 |
+| MLP | 0.911 | 0.886 | 0.790 | 0.054 | 0.035 | 0.210 | 0.351 |
+
+A MLP convergiu (early stopping na iteração 52 de 500; nenhum `ConvergenceWarning` na CV nem no ajuste
+final). Ela tem a segunda maior accuracy e o menor over-triage, mas o **menor recall de EMERGENCY**,
+coerente com a ausência de `class_weight`. Pelo critério do projeto (recall de EMERGENCY primeiro), ela
+não seria escolhida. Tempos são de uma única execução local e variam entre máquinas.
+
+Matriz de confusão do Random Forest (teste):
 
 | real \ previsto | PRIMARY | URGENT | EMERGENCY |
 |---|---|---|---|
