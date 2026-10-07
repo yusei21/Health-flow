@@ -40,26 +40,59 @@ class HealthFlowSymptomFeatureBuilder:
         return build_features(extraction, context)
 
 
+# Structured triage vitals shared by MIMIC-IV-ED and Triagegeist (canonical field names).
+STRUCTURED_VITAL_FEATURES: tuple[str, ...] = (
+    "heart_rate",
+    "respiratory_rate",
+    "oxygen_saturation",
+    "systolic_bp",
+    "diastolic_bp",
+    "temperature_celsius",
+    "pain",
+)
+_AGE_RANGES_BY_RANK = [r for r in AgeRange if r is not AgeRange.UNKNOWN]
+
+
+def _structured_vitals(example: RoutingTrainingExample) -> list[float]:
+    values: list[float | None] = [getattr(example, name) for name in STRUCTURED_VITAL_FEATURES]
+    return [math.nan if value is None else value for value in values]
+
+
 class MimicStructuredFeatureBuilder:
     """Triage vital signs + pain only. Age is absent from the triage table, so unused."""
 
     feature_set: str = "mimic-structured-vitals-v1"
-    feature_names: tuple[str, ...] = (
-        "heart_rate",
-        "respiratory_rate",
-        "oxygen_saturation",
-        "systolic_bp",
-        "diastolic_bp",
-        "temperature_celsius",
-        "pain",
-    )
+    feature_names: tuple[str, ...] = STRUCTURED_VITAL_FEATURES
 
     def build(self, example: RoutingTrainingExample) -> list[float]:
-        values: list[float | None] = [getattr(example, name) for name in self.feature_names]
-        return [math.nan if value is None else value for value in values]
+        return _structured_vitals(example)
+
+
+class TriagegeistStructuredFeatureBuilder:
+    """Triage vitals + pain + ordinal age range (NaN when unknown). No IDs, no free text.
+
+    Separate feature set from MIMIC so either can evolve without invalidating the other's
+    models. Fields absent from the real CSV are NaN in every row (see dataset metadata).
+    """
+
+    feature_set: str = "triagegeist-structured-v1"
+    feature_names: tuple[str, ...] = (*STRUCTURED_VITAL_FEATURES, "age_range_rank")
+
+    def build(self, example: RoutingTrainingExample) -> list[float]:
+        age = example.age_range
+        age_rank = (
+            math.nan
+            if age is None or age is AgeRange.UNKNOWN
+            else float(_AGE_RANGES_BY_RANK.index(age))
+        )
+        return [*_structured_vitals(example), age_rank]
 
 
 FEATURE_BUILDERS: dict[str, FeatureBuilder] = {
     builder.feature_set: builder
-    for builder in (HealthFlowSymptomFeatureBuilder(), MimicStructuredFeatureBuilder())
+    for builder in (
+        HealthFlowSymptomFeatureBuilder(),
+        MimicStructuredFeatureBuilder(),
+        TriagegeistStructuredFeatureBuilder(),
+    )
 }
