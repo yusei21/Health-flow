@@ -22,9 +22,16 @@ RED_FLAG: dict[str, object] = {
 }
 
 
-def make_client(llm: ScriptedLLMProvider, classifier: RoutingClassifier | None) -> TestClient:
+def make_client(
+    llm: ScriptedLLMProvider,
+    classifier: RoutingClassifier | None,
+    cors_allowed_origins: list[str] | None = None,
+) -> TestClient:
     settings = Settings(
-        app_env=AppEnv.TEST, demo_auth_token=SecretStr(TOKEN), demo_user_id=DEMO_USER_ID
+        app_env=AppEnv.TEST,
+        demo_auth_token=SecretStr(TOKEN),
+        demo_user_id=DEMO_USER_ID,
+        cors_allowed_origins=cors_allowed_origins or [],
     )
     container = Container(
         harness=build_harness(llm, classifier),
@@ -127,3 +134,35 @@ def test_unexpected_error_returns_generic_500(classifier: RoutingClassifier) -> 
 def test_demo_auth_is_refused_in_production() -> None:
     with pytest.raises(ValueError, match="production"):
         Settings(app_env=AppEnv.PRODUCTION, demo_auth_token=SecretStr("x"))
+
+
+def test_wildcard_cors_is_refused_in_production() -> None:
+    with pytest.raises(ValueError, match="production"):
+        Settings(app_env=AppEnv.PRODUCTION, cors_allowed_origins=["*"])
+
+
+def _preflight(client: TestClient, origin: str) -> dict[str, str]:
+    return dict(
+        client.options(
+            "/api/v1/routing",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        ).headers
+    )
+
+
+def test_cors_allows_only_configured_origin(classifier: RoutingClassifier) -> None:
+    vite = "http://localhost:5173"
+    with make_client(ScriptedLLMProvider(RED_FLAG), classifier, [vite]) as client:
+        assert _preflight(client, vite).get("access-control-allow-origin") == vite
+        assert "access-control-allow-origin" not in _preflight(client, "https://evil.example")
+        response = client.post("/api/v1/routing", json=VALID_BODY, headers={**AUTH, "Origin": vite})
+    assert response.headers["access-control-allow-origin"] == vite
+    assert "x-request-id" in response.headers["access-control-expose-headers"].lower()
+
+
+def test_cors_is_disabled_by_default(client: TestClient) -> None:
+    assert "access-control-allow-origin" not in _preflight(client, "http://localhost:5173")

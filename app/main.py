@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.dependencies.container import Container, build_container
 from app.api.errors import register_error_handlers
@@ -24,12 +25,19 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     app = FastAPI(
         title="Health-flow",
         version="0.1.0",
-        description=(
-            "Orientação de navegação em saúde; não substitui avaliação profissional."
-        ),
+        description=("Orientação de navegação em saúde; não substitui avaliação profissional."),
         lifespan=lifespan,
     )
     app.add_middleware(RequestIdMiddleware)
+    if resolved.cors_allowed_origins:
+        # Added last so it is outermost and also decorates error responses.
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=resolved.cors_allowed_origins,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+            expose_headers=["X-Request-ID"],
+        )
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(routing.router, prefix="/api/v1")

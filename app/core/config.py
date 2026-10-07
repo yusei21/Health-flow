@@ -36,11 +36,20 @@ class Settings(BaseSettings):
     demo_auth_token: SecretStr | None = None
     demo_user_id: UUID | None = None
 
+    # Browser origins allowed to call the API (e.g. the Vite dev server). Empty = CORS off.
+    cors_allowed_origins: list[str] = Field(default_factory=list)
+
     @model_validator(mode="after")
     def _forbid_demo_auth_in_production(self) -> Self:
         # The static demo token exists only to exercise the flow locally.
         if self.app_env is AppEnv.PRODUCTION and self.demo_auth_token is not None:
             raise ValueError("demo authentication must not be enabled in production")
+        return self
+
+    @model_validator(mode="after")
+    def _forbid_wildcard_cors_in_production(self) -> Self:
+        if self.app_env is AppEnv.PRODUCTION and "*" in self.cors_allowed_origins:
+            raise ValueError("wildcard CORS origin must not be used in production")
         return self
 
     @property
