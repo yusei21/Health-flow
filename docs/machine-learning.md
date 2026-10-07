@@ -1,75 +1,122 @@
 # Machine Learning — classificador de encaminhamento
 
 > **PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS.**
-> Todas as métricas abaixo foram obtidas em **dados sintéticos** e **não são evidência clínica**.
+> Nenhuma métrica aqui é evidência clínica. Detalhes dos dados, do MIMIC-IV-ED e do domain shift em
+> [datasets.md](datasets.md).
 
 ## Problema
 
 Classificação supervisionada **multiclasse** do nível de encaminhamento. O modelo não diagnostica doenças.
 
-| Classe (`CareLevel`) | Serviço (`ServiceType`) |
-|---|---|
-| `PRIMARY_CARE` | UBS |
-| `URGENT_CARE` | UPA |
-| `EMERGENCY` | Pronto-socorro + orientação SAMU 192 |
+| Classe (`CareLevel`) | Serviço (`ServiceType`) | Ordem de gravidade |
+|---|---|---|
+| `PRIMARY_CARE` | UBS | 0 |
+| `URGENT_CARE` | UPA | 1 |
+| `EMERGENCY` | Pronto-socorro + orientação SAMU 192 | 2 |
 
-## Dataset
-
-- Gerador: `app/ml/training/dataset.py` (`make dataset`), `random_state=42`, 4000 linhas.
-- Versão: `synthetic-v1`. Arquivo: `data/processed/routing_synthetic_v1.csv` (+ `.meta.json` com o aviso).
-- Marcação: **"ACADEMIC / SYNTHETIC DATA — NOT FOR CLINICAL USE"**.
-- Processo gerador: para cada exemplo sorteia-se uma classe (55% / 30% / 15%), depois sintomas de um
-  "perfil" da classe, intensidade, duração, faixa etária e fatores de risco. Ruídos propositais:
-  30% dos exemplos ganham um sintoma aleatório de outro perfil; casos de urgência em idosos com fator de
-  risco viram emergência com 40% de probabilidade; 5% dos rótulos são trocados aleatoriamente.
-- Consequência: as métricas medem **o quanto o modelo recupera esse processo gerador**, não a
-  realidade clínica.
-
-### Trocando o dataset
-
-Qualquer dataset que siga o esquema CSV abaixo pode substituir o sintético:
+## Arquitetura do código
 
 ```text
-symptoms,severity,duration_minutes,age_range,risk_factors,label
-chest_pain|shortness_of_breath,severe,20,adult,cardiovascular_disease,EMERGENCY
+app/ml/
+├── data/
+│   ├── schemas.py        RoutingTrainingExample (esquema canônico), DatasetInfo, TrainingDataset
+│   ├── base.py           CSV canônico processado + sidecar .meta.json
+│   ├── synthetic.py      gerador sintético-v1 → esquema canônico
+│   └── mimic_ed.py       triage do MIMIC-IV-ED → esquema canônico; map_esi_to_care_level
+├── features.py           features de sintomas da API (fonte única de verdade para inferência)
+├── feature_builders.py   um builder por feature set:
+│                           HealthFlowSymptomFeatureBuilder  (healthflow-symptoms-v1)
+│                           MimicStructuredFeatureBuilder    (mimic-structured-vitals-v1)
+├── splits.py             split treino/teste e folds de CV (por paciente quando há group_id)
+├── metrics.py            métricas, incluindo under/over-triage
+├── experiments.py        registro: experimento → dataset, feature set, diretório do modelo
+├── classifier.py         carregamento verificado (checksum, feature set) + ModelMetadata
+├── inference.py          serviço usado pela API
+└── training/
+    ├── dataset.py        CLI make dataset-synthetic
+    ├── prepare_mimic.py  CLI make dataset-mimic
+    ├── train.py          CLI make train-* (compara, seleciona, salva, grava benchmarks)
+    ├── evaluate.py       CLI make evaluate-* (só no teste reservado)
+    └── benchmark.py      registro JSON imutável por execução
 ```
 
-```bash
-uv run python -m app.ml.training.train --dataset caminho.csv --dataset-version real-v1
+Não há `if dataset == ...`: cada fonte converte para o esquema canônico e cada feature set tem seu
+builder. A API só aceita modelos do feature set `healthflow-symptoms-v1`. Um modelo de sinais vitais é
+**recusado** na inicialização, porque a API não tem sinais vitais.
+
+## Experimentos
+
+| | Dados | Entrada do modelo | Estado |
+|---|---|---|---|
+| **A** `synthetic_baseline` | `synthetic-v1` (4000 linhas) | sintomas, intensidade, duração, faixa etária e fatores de risco (34 features) | ✅ executado |
+| **B** `structured_mimic_baseline` | MIMIC-IV-ED triage | FC, FR, SpO₂, PAS, PAD, temperatura (°C) e dor (7 features) | ✅ pipeline pronto; **sem resultados**: requer acesso credenciado aos dados |
+| **C** (planejado) | MIMIC-IV-ED `chiefcomplaint` → Qwen3 4B local → `SymptomExtraction` | features do Health-flow | ⏳ não implementado |
+
+A pergunta do artigo: **dados estruturados reais (B) × texto interpretado pelo LLM (C)**, com A como
+baseline acadêmico. A e B/C **não são diretamente comparáveis**: têm rótulos de natureza diferente
+(gerador artificial × ESI mapeado).
+
+## Modelos comparados (iguais em todos os experimentos)
+
+Todos dentro de um `Pipeline` com `SimpleImputer(strategy="median", add_indicator=True)`, ajustado
+**só no treino** de cada *fold*. Ele não altera nada quando não há faltantes, como no sintético.
+Todos usam `class_weight="balanced"` e `random_state=42`.
+
+- `LogisticRegression(max_iter=2000)` com `StandardScaler`
+- `DecisionTreeClassifier(max_depth=6, min_samples_leaf=10)`
+- `RandomForestClassifier(n_estimators=200, max_depth=10, min_samples_leaf=5)`
+
+XGBoost e busca de hiperparâmetros ficam fora por enquanto.
+
+## Protocolo de avaliação (sem vazamento)
+
+| Etapa | Sem pacientes identificados (A) | Com `subject_id` (B, C) |
+|---|---|---|
+| Teste reservado (~20%) | `train_test_split` estratificado por linha | 1 de 5 *folds* de `StratifiedGroupKFold`: **nenhum paciente em treino e teste ao mesmo tempo** |
+| Validação cruzada (no treino) | `StratifiedKFold(5)` | `StratifiedGroupKFold(5)`: nenhum paciente em dois *folds* |
+| Seleção do modelo | **somente CV**: maior `round(recall EMERGENCY, 2)`, desempate por F1 macro | idem |
+| Teste | uma avaliação final por modelo, só para relatório; **não** influencia a seleção | idem |
+
+O identificador de *split* aparece em `metadata.json` e em cada benchmark
+(`stratified_row_80_20__cv_stratified_kfold_5` ou
+`stratified_group_by_patient_80_20__cv_stratified_group_kfold_5`). `make evaluate-*` recalcula o
+mesmo *split* de forma determinística e pontua **apenas** o teste reservado. Se o dataset mudou desde o
+treino, ele se recusa a rodar.
+
+## Métricas
+
+accuracy · precision/recall/F1 por classe · precision/recall/F1 macro · matriz de confusão ·
+recall de EMERGENCY, e mais:
+
+- `under_triage_rate`: fração de **todos** os casos previstos como menos graves que o rótulo;
+- `over_triage_rate`: fração de **todos** os casos previstos como mais graves que o rótulo;
+- `critical_under_triage_rate`: fração dos casos **EMERGENCY reais** previstos como outra classe
+  (= 1 − recall de EMERGENCY). É o erro mais grave para o sistema.
+
+## Artefatos e benchmarks
+
+```text
+models/<experimento>/routing_model.joblib
+models/<experimento>/metadata.json   experiment, dataset_name/version, feature_set, features,
+                                     split_strategy, number_of_rows, number_of_patients,
+                                     model_type, model_version, hyperparameters, metrics,
+                                     training_date, git_commit, artifact_sha256, random_state
+benchmarks/results/<timestamp>_<experimento>_<modelo>_<run_id>.json
 ```
 
-## Features (`app/ml/features.py`)
+- Cada `make train-*` grava **um JSON por modelo candidato** com os mesmos campos, além de métricas de CV
+  e de teste, `training_time_seconds`, `inference_time_ms_per_row` e `selected_for_deployment`.
+  Arquivos são abertos em modo exclusivo: **nunca sobrescrevem** execuções anteriores.
+- `git_commit` termina em `-dirty` se havia mudanças não commitadas. Para o artigo, rode com a árvore
+  limpa.
+- `make benchmark-summary` gera uma tabela Markdown de todos os resultados.
+- O artefato `joblib` só é carregado se o SHA-256 bater com `metadata.json` (joblib executa código ao
+  desserializar).
 
-Um único módulo gera as features no treino e na inferência. A lista `FEATURE_NAMES` é gravada em
-`models/metadata.json`; se o código mudar, o artefato antigo é **recusado** (evita *train/serve skew*).
+## Resultados — Experimento A (`synthetic-v1`)
 
-| Grupo | Features |
-|---|---|
-| Sintomas | 22 indicadores binários (`symptom__chest_pain`, ...) |
-| Contagem | `symptom_count` |
-| Intensidade | `severity_rank` (1–3) + `severity_unknown` |
-| Duração | `duration_log_hours` = log(1 + horas) + `duration_unknown` |
-| Idade | `age_range_rank` (0–4) + `age_unknown` |
-| Contexto | 5 fatores de risco binários (cardiovascular, respiratório, diabetes, imunossupressão, gestação) |
-
-O nome, o histórico livre e os medicamentos do paciente **não** entram no modelo.
-
-## Modelos comparados
-
-Todos com `class_weight="balanced"` (EMERGENCY é minoritária) e `random_state=42`.
-
-- `LogisticRegression` (com `StandardScaler`)
-- `DecisionTreeClassifier` (`max_depth=6`, `min_samples_leaf=10`)
-- `RandomForestClassifier` (200 árvores, `max_depth=10`, `min_samples_leaf=5`)
-
-### Protocolo
-
-1. *Split* estratificado 80/20 (treino / teste reservado).
-2. Validação cruzada estratificada de 5 *folds* **somente no treino**.
-3. Seleção: maior *recall* de EMERGENCY (arredondado a 2 casas), desempate por F1 macro.
-4. Reajuste do escolhido no treino completo e **uma** avaliação no teste reservado.
-
-### Resultados (execução de 2026-10-07, `synthetic-v1`)
+**Dados sintéticos: os números medem a recuperação do processo gerador, não a realidade clínica.**
+Os valores exatos estão nos JSON em `benchmarks/results/`.
 
 Validação cruzada (treino, n=3200):
 
@@ -77,49 +124,60 @@ Validação cruzada (treino, n=3200):
 |---|---|---|---|---|---|
 | Logistic Regression | 0.880 | 0.847 | 0.854 | 0.850 | 0.798 |
 | Decision Tree | 0.854 | 0.829 | 0.843 | 0.833 | 0.799 |
-| **Random Forest** (selecionado) | 0.900 | 0.881 | 0.884 | 0.881 | 0.826 |
+| **Random Forest** (selecionado pela CV) | 0.900 | 0.881 | 0.884 | 0.881 | 0.826 |
 
-Teste reservado (n=800), Random Forest:
+Teste reservado (n=800), Random Forest: accuracy 0.931 · F1 macro 0.919 · recall EMERGENCY 0.891 ·
+under-triage 0.025 · over-triage 0.044 · critical under-triage 0.109.
 
-| Classe | Precisão | Recall | F1 | Suporte |
-|---|---|---|---|---|
-| PRIMARY_CARE | 0.983 | 0.938 | 0.960 | 436 |
-| URGENT_CARE | 0.859 | 0.943 | 0.899 | 226 |
-| EMERGENCY | 0.904 | **0.891** | 0.898 | 138 |
-
-Accuracy 0.931 · F1 macro 0.919.
-
-Matriz de confusão (linhas = real, colunas = previsto):
-
-| | PRIMARY | URGENT | EMERGENCY |
+| real \ previsto | PRIMARY | URGENT | EMERGENCY |
 |---|---|---|---|
 | **PRIMARY** | 409 | 22 | 5 |
 | **URGENT** | 5 | 213 | 8 |
 | **EMERGENCY** | 2 | 13 | 123 |
 
-Os números exatos são regenerados por `make train` e gravados em `models/metadata.json`.
+Leitura: 15 de 138 emergências (≈11%) seriam rebaixadas **pelo modelo sozinho**. Por isso o ML nunca é
+a autoridade final: o Safety Engine impõe pisos e o Care Routing nunca reduz um piso.
 
-### Leitura crítica
+## Resultados — Experimento B (MIMIC estruturado)
 
-- 15 de 138 emergências (≈11%) seriam rebaixadas **pelo modelo sozinho**. Por isso o ML nunca é a
-  autoridade final: o Safety Engine impõe pisos e o Care Routing nunca reduz um piso.
-- O F1 do teste ficou acima da média da validação cruzada; com dados sintéticos e um único *split*,
-  isso reflete variância, não "generalização clínica".
-- Um modelo que acerta o gerador sintético pode falhar totalmente em dados reais.
+**Ainda não há resultados.** O pipeline foi verificado de ponta a ponta apenas com arquivos **falsos**
+no formato do MIMIC (testes automatizados). Os números aparecerão em `benchmarks/results/` quando
+alguém com acesso credenciado rodar:
 
-## Comportamento em produção do protótipo
+```bash
+make dataset-mimic MIMIC_SOURCE_VERSION=<versão>   # data/raw/mimic-iv-ed/triage.csv.gz
+make train-mimic
+make evaluate-mimic
+```
 
-- O modelo é treinado **antes** (`make train`) e apenas carregado na subida da API.
-- O artefato (`joblib`) tem SHA-256 registrado nos metadados e é verificado antes de carregar
-  (`joblib` desserializa código: só carregamos o artefato que nós mesmos produzimos).
-- Modelo ausente/incompatível → API sobe, `/health` mostra `ml_model_loaded: false`, e o roteamento usa
-  o fallback conservador `URGENT_CARE` (código `ML_UNAVAILABLE_CONSERVATIVE_FALLBACK`).
+## Experimento C — o que falta
+
+1. CLI `app.ml.training.prepare_mimic_llm` com `--limit`/`--offset`, lendo
+   `data/processed/routing_mimic_v1.csv` (a queixa já está lá).
+2. Cache local chaveado por `sha256(queixa normalizada + modelo + versão do prompt)`, guardando **só** a
+   extração (sem IDs). Queixa repetida não chama o LLM de novo.
+3. Escrever `symptoms`/`severity`/`duration_minutes` no esquema canônico, mantendo `group_id` e
+   `label`, num dataset `mimic-ed-llm-v1`.
+4. Registrar o experimento com `HealthFlowSymptomFeatureBuilder`.
+5. Comparação justa com B: **mesmo subconjunto de linhas e mesmo split por paciente** (B precisa ser
+   re-treinado no mesmo subconjunto usado por C).
+6. Atenção: as queixas estão em inglês e são abreviadas ("CP", "SOB"), mas o prompt atual é em
+   português. Medir a taxa de extração vazia antes de treinar.
+7. Somente LLM local: o DUA do PhysioNet restringe o envio dos dados a serviços de terceiros.
+
+## Comportamento na API
+
+- O modelo é treinado **antes** (`make train`) e apenas carregado na inicialização a partir de
+  `HEALTHFLOW_ML_MODEL_DIR` (padrão `models/synthetic-v1`).
+- Modelo ausente, incompatível ou de outro feature set → API sobe com `ml_model_loaded: false` e usa o
+  fallback conservador `URGENT_CARE`.
 - Confiança abaixo de `HEALTHFLOW_ML_LOW_CONFIDENCE_THRESHOLD` (0.55) → escolhe a mais grave entre as
-  duas classes mais prováveis (`ML_LOW_CONFIDENCE_ESCALATED`).
+  duas classes mais prováveis.
 
 ## Limitações
 
-- Dados sintéticos; nenhum dado real de pacientes.
-- Vocabulário de sintomas fechado (22 códigos); o que o LLM não mapear não chega ao modelo.
-- Não há calibração de probabilidades nem análise de equidade entre grupos.
+- Experimento A: dados sintéticos. Experimento B: domain shift EUA × SUS, rótulo derivado do ESI por
+  regra do projeto, sem idade (ver [datasets.md](datasets.md)).
+- Sem calibração de probabilidades, sem análise de equidade entre grupos, sem intervalos de confiança.
+- Um único *split* de teste; variância entre *seeds* não estimada.
 - Sem validação clínica, sem aprovação regulatória.

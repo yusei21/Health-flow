@@ -9,6 +9,7 @@
 |---|---|---|
 | A | FastAPI, config, schemas, `LLMProvider`, Ollama, extração estruturada | ✅ implementado |
 | B | Dataset sintético, features, treino/avaliação, persistência, inferência | ✅ implementado |
+| B+ | Esquema canônico de dados, loader MIMIC-IV-ED, split por paciente, métricas de triagem, benchmarks | ✅ implementado (sem dados MIMIC no repositório; ver [datasets.md](datasets.md)) |
 | C | Safety Engine, regras simuladas, *override* | ✅ implementado |
 | D | Agent Harness, Care Routing, Context Builder | ✅ implementado |
 | E | `MockFacilityProvider`, distância, seleção de unidade, endpoint | ✅ implementado |
@@ -151,7 +152,8 @@ app/
 ├── agents/                    # intent, patient_context, care_routing, navigation
 ├── harness/                   # HealthFlowHarness, HarnessState, montagem da resposta
 ├── llm/                       # LLMProvider, OllamaLLMProvider
-├── ml/                        # features, métricas, classifier, inference, training/
+├── ml/                        # data/ (fontes → esquema canônico), feature builders, splits,
+│                              # métricas, experimentos, classifier, inference, training/
 ├── safety/                    # SafetyRule, regras acadêmicas, SafetyEngine
 ├── context/                   # PatientContextBuilder
 ├── repositories/              # PatientRepository + implementação em memória

@@ -30,7 +30,7 @@ Login → prontuário autorizado → relato em texto livre
 | **Agent Harness** | coordena etapas, falhas e quem tem autoridade |
 | **Tools** | busca de unidades (provider simulado) |
 
-Detalhes: [docs/architecture.md](docs/architecture.md) · ML (dataset, modelos, métricas, limitações): [docs/machine-learning.md](docs/machine-learning.md)
+Detalhes: [docs/architecture.md](docs/architecture.md) · ML (pipelines, modelos, métricas, limitações): [docs/machine-learning.md](docs/machine-learning.md) · Dados (sintético, MIMIC-IV-ED, domain shift): [docs/datasets.md](docs/datasets.md)
 
 ## Executando
 
@@ -40,7 +40,7 @@ Pré-requisitos: Python 3.12, [uv](https://docs.astral.sh/uv/), [Ollama](https:/
 ollama pull qwen3:4b          # uma vez; não é baixado automaticamente
 cp .env.example .env          # ajuste HEALTHFLOW_DEMO_AUTH_TOKEN
 make install                  # uv sync
-make train                    # gera dataset sintético + treina e salva models/
+make train                    # dataset sintético + treino → models/synthetic-v1/
 make dev                      # API em http://localhost:8000 (docs em /docs)
 ```
 
@@ -84,14 +84,22 @@ make test-ollama  # teste de integração real com o Ollama local
 make lint         # ruff check + format --check
 make format
 make typecheck    # mypy --strict
-make train        # dataset + treino + metadados
-make evaluate     # reavalia o modelo salvo
+make train        # = train-synthetic (modelo usado pela API)
+make evaluate     # = evaluate-synthetic (só no teste reservado)
+
+# Experimentos de ML (ver docs/machine-learning.md e docs/datasets.md)
+make dataset-synthetic / train-synthetic / evaluate-synthetic
+make dataset-mimic     # requer data/raw/mimic-iv-ed/triage.csv(.gz) — acesso credenciado PhysioNet
+make train-mimic       # → models/mimic-structured-v1/ + benchmarks/results/*.json
+make evaluate-mimic
+make benchmark-ml      # roda A sempre; B se o dataset MIMIC processado existir
+make benchmark-summary # tabela Markdown dos resultados
 make up / down    # docker compose (api + postgres/pgvector)
 ```
 
 ### Docker
 
-`docker compose up --build` sobe a API e o PostgreSQL com pgvector habilitado (o banco ainda não é usado pela API — Fase F). O Ollama continua no host e é acessado em `http://host.docker.internal:11434/v1`; `models/` é montado como volume somente leitura (rode `make train` antes).
+`docker compose up --build` sobe a API e o PostgreSQL com pgvector habilitado (o banco ainda não é usado pela API — Fase F). O Ollama continua no host e é acessado em `http://host.docker.internal:11434/v1`; `models/` é montado como volume somente leitura e a API usa `models/synthetic-v1` (rode `make train` antes).
 
 Se a API no contêiner responder 503 para o relato, o contêiner provavelmente não alcança o Ollama do host: verifique se o Ollama escuta em `0.0.0.0` (`OLLAMA_HOST=0.0.0.0`) e se o firewall do host (ex.: `ufw`) permite a rede do Docker na porta 11434.
 
