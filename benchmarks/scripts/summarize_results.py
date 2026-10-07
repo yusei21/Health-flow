@@ -34,9 +34,9 @@ def _short_commit(commit: str) -> str:
 
 
 def _converged(record: dict[str, Any]) -> str:
-    # Records written before diagnostics existed have no convergence information.
+    # n/a: record written before diagnostics existed, or a non-iterative estimator.
     diagnostics = record.get("training_diagnostics")
-    if not diagnostics:
+    if not diagnostics or "n_iter" not in diagnostics:
         return "n/a"
     return "yes" if diagnostics["converged"] else "NO"
 
