@@ -233,7 +233,8 @@ async def test_response_never_contains_diagnosis_field(classifier: RoutingClassi
         await run(build_harness(ScriptedLLMProvider(MILD_PAYLOAD), classifier))
     )
     assert "diagnosis" not in response.model_dump()
-    assert "NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS" in response.disclaimer
+    assert "não substitui avaliação profissional" in response.disclaimer
+    assert "192" in response.disclaimer
 
 
 # --- safety floor --------------------------------------------------------------------

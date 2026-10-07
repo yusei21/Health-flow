@@ -62,7 +62,7 @@ curl -s -X POST localhost:8000/api/v1/routing \
   "emergency_guidance": "Possível situação de emergência. Ligue imediatamente para o SAMU 192. Este sistema NÃO aciona ambulância automaticamente.",
   "reason_codes": ["SAFETY_RULE:RED_FLAG_001", "SAFETY_RULE:RED_FLAG_006", "SAFETY_RULE:CAUTION_001", "SAFETY_OVERRIDE"],
   "safety_override": true,
-  "disclaimer": "PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS. …"
+  "disclaimer": "Health-flow fornece orientação de navegação em saúde e não substitui avaliação profissional. Em caso de emergência, ligue 192 (SAMU)."
 }
 ```
 

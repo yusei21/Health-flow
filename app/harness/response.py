@@ -3,9 +3,8 @@ from app.schemas.care import CareLevel
 from app.schemas.routing import FacilityResponse, RoutingResponse
 
 DISCLAIMER = (
-    "PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS. "
-    "Esta orientação não é diagnóstico e não substitui avaliação profissional. "
-    "Em caso de emergência, ligue 192 (SAMU)."
+    "Health-flow fornece orientação de navegação em saúde e não substitui avaliação "
+    "profissional. Em caso de emergência, ligue 192 (SAMU)."
 )
 EMERGENCY_GUIDANCE = (
     "Possível situação de emergência. Ligue imediatamente para o SAMU 192. "

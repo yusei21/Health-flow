@@ -24,7 +24,9 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     app = FastAPI(
         title="Health-flow",
         version="0.1.0",
-        description="PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS.",
+        description=(
+            "Orientação de navegação em saúde; não substitui avaliação profissional."
+        ),
         lifespan=lifespan,
     )
     app.add_middleware(RequestIdMiddleware)
