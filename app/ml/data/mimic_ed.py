@@ -15,16 +15,14 @@ Missing values are left as None here; imputation happens inside the sklearn Pipe
 """
 
 import csv
-import gzip
 import hashlib
-import io
 import math
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TextIO
 
+from app.ml.data.parsing import open_text, parse_number
 from app.ml.data.schemas import DatasetInfo, RoutingTrainingExample
 from app.schemas.care import CareLevel
 
@@ -83,7 +81,7 @@ def map_esi_to_care_level(acuity: object) -> CareLevel | None:
     if isinstance(acuity, bool) or acuity is None:
         return None
     if isinstance(acuity, str):
-        acuity = _parse_number(acuity)
+        acuity = parse_number(acuity)
     if not isinstance(acuity, int | float) or not math.isfinite(acuity):
         return None
     if acuity != int(acuity):
@@ -145,7 +143,7 @@ class PreparationReport:
 
 def read_triage(path: Path, report: PreparationReport) -> Iterator[RoutingTrainingExample]:
     """Stream canonical examples from a triage CSV or CSV.gz, filling `report`."""
-    with _open_text(path) as handle:
+    with open_text(path) as handle:
         reader = csv.DictReader(handle)
         columns = set(reader.fieldnames or ())
         if missing := REQUIRED_COLUMNS - columns:
@@ -192,7 +190,7 @@ def _convert_row(row: dict[str, str], report: PreparationReport) -> RoutingTrain
 
 
 def _clean_vital(raw: str | None, vital: _Vital, report: PreparationReport) -> float | None:
-    value = _parse_number(raw)
+    value = parse_number(raw)
     if value is None:
         return None
     if not vital.low <= value <= vital.high:
@@ -204,24 +202,8 @@ def _clean_vital(raw: str | None, vital: _Vital, report: PreparationReport) -> f
 def _clean_pain(raw: str | None, report: PreparationReport) -> float | None:
     if raw is None or not raw.strip():
         return None
-    value = _parse_number(raw)
+    value = parse_number(raw)
     if value is None or not 0 <= value <= 10:
         report.pain_invalid += 1
         return None
     return value
-
-
-def _parse_number(raw: str | None) -> float | None:
-    if raw is None:
-        return None
-    try:
-        value = float(raw.strip())
-    except ValueError:
-        return None
-    return value if math.isfinite(value) else None
-
-
-def _open_text(path: Path) -> TextIO:
-    if path.name.endswith(".gz"):
-        return io.TextIOWrapper(gzip.open(path, "rb"), encoding="utf-8", newline="")
-    return path.open(encoding="utf-8", newline="")
