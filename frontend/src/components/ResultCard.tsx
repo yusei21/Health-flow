@@ -14,7 +14,14 @@ export function ResultCard({ result }: { result: RoutingResponse }) {
         </div>
       )}
 
-      {result.needs_more_information && (\n        <div role="status">\n          <strong>Informações insuficientes para determinar a gravidade.</strong>\n          <p>Responda às perguntas abaixo no relato e faça uma nova busca.</p>\n          <ul>{(result.follow_up_questions ?? []).map((question) => <li key={question}>{question}</li>)}</ul>\n        </div>\n      )}\n      <dl className="result-grid">
+      {result.needs_more_information && (
+        <div role="status">
+          <strong>Informações insuficientes para determinar a gravidade.</strong>
+          <p>Responda às perguntas abaixo no relato e faça uma nova busca.</p>
+          <ul>{(result.follow_up_questions ?? []).map((question) => <li key={question}>{question}</li>)}</ul>
+        </div>
+      )}
+      <dl className="result-grid">
         <dt>Nível de atendimento</dt>
         <dd>{result.needs_more_information ? "Avaliação adicional necessária" : careLevelLabel(result.care_level)}</dd>
         <dt>Tipo de serviço</dt>
