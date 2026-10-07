@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.core.exceptions import (
     AuthenticationError,
     FacilityProviderError,
+    HarnessTimeoutError,
     HealthFlowError,
     LLMError,
     MLInferenceError,
@@ -23,6 +24,7 @@ _STATUS_BY_ERROR: list[tuple[type[HealthFlowError], int]] = [
     (LLMError, status.HTTP_503_SERVICE_UNAVAILABLE),
     (MLInferenceError, status.HTTP_503_SERVICE_UNAVAILABLE),
     (FacilityProviderError, status.HTTP_503_SERVICE_UNAVAILABLE),
+    (HarnessTimeoutError, status.HTTP_503_SERVICE_UNAVAILABLE),
 ]
 
 

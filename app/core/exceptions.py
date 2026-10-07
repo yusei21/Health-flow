@@ -43,3 +43,25 @@ class SafetyEngineError(HealthFlowError):
 
 class AuthenticationError(HealthFlowError):
     public_message = "Credenciais ausentes ou inválidas."
+
+
+class HarnessError(HealthFlowError):
+    """The harness stopped a run before it could produce a routing decision."""
+
+    public_message = "Não foi possível concluir a orientação."
+
+    def __init__(self, message: str, finish_reason: str) -> None:
+        super().__init__(message)
+        self.finish_reason = finish_reason
+
+
+class HarnessPolicyError(HarnessError):
+    """A planner proposed an action the policy does not allow in the current state."""
+
+
+class HarnessLimitError(HarnessError):
+    """A step, LLM-call or tool-call budget was exhausted."""
+
+
+class HarnessTimeoutError(HarnessError):
+    """The run exceeded its global time budget."""

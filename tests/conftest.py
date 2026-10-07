@@ -11,7 +11,9 @@ from app.agents.navigation_agent import NavigationAgent
 from app.agents.patient_context_agent import PatientContextAgent
 from app.context.builder import PatientContextBuilder
 from app.core.exceptions import LLMError
-from app.harness.healthflow_harness import HealthFlowHarness
+from app.harness.autonomous_harness import AutonomousHealthFlowHarness
+from app.harness.planner import Planner
+from app.harness.policy import HarnessPolicy
 from app.llm.schemas import ChatMessage
 from app.ml.classifier import RoutingClassifier
 from app.ml.data.synthetic import generate_examples, save_dataset
@@ -20,7 +22,7 @@ from app.ml.inference import RoutingInferenceService
 from app.ml.training.train import run_experiment
 from app.repositories.patients import InMemoryPatientRepository, synthetic_demo_patient
 from app.safety.engine import SafetyEngine
-from app.tools.facilities import MockFacilityProvider, simulated_facilities
+from app.tools.facilities import FacilityProvider, MockFacilityProvider, simulated_facilities
 
 DEMO_USER_ID = UUID("7d6f0f3e-2b8a-4c1e-9a52-3f4b8c2d1e90")
 SAO_PAULO = (-23.55, -46.64)
@@ -67,17 +69,22 @@ def classifier(trained_model_dir: Path) -> RoutingClassifier:
 def build_harness(
     llm: ScriptedLLMProvider,
     classifier: RoutingClassifier | None,
-    facilities: MockFacilityProvider | None = None,
+    facilities: FacilityProvider | None = None,
     radius_km: float = 25,
-) -> HealthFlowHarness:
+    inference: RoutingInferenceService | None = None,
+    planner: Planner | None = None,
+    policy: HarnessPolicy | None = None,
+) -> AutonomousHealthFlowHarness:
     repository = InMemoryPatientRepository([synthetic_demo_patient(DEMO_USER_ID)])
-    return HealthFlowHarness(
+    return AutonomousHealthFlowHarness(
         intent_agent=IntentAgent(llm),
         context_agent=PatientContextAgent(repository, PatientContextBuilder()),
         safety_engine=SafetyEngine(),
-        inference=RoutingInferenceService(classifier),
+        inference=inference or RoutingInferenceService(classifier),
         routing_agent=CareRoutingAgent(low_confidence_threshold=0.55),
         navigation_agent=NavigationAgent(
             facilities or MockFacilityProvider(simulated_facilities()), radius_km
         ),
+        planner=planner,
+        policy=policy,
     )

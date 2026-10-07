@@ -11,7 +11,7 @@ from app.auth.demo_token import DemoTokenAuthenticator
 from app.context.builder import PatientContextBuilder
 from app.core.config import Settings
 from app.core.exceptions import MLModelUnavailableError
-from app.harness.healthflow_harness import HealthFlowHarness
+from app.harness.autonomous_harness import AutonomousHealthFlowHarness
 from app.llm.ollama_provider import OllamaLLMProvider
 from app.ml.classifier import RoutingClassifier
 from app.ml.feature_builders import HealthFlowSymptomFeatureBuilder
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Container:
-    harness: HealthFlowHarness
+    harness: AutonomousHealthFlowHarness
     patients: PatientRepository
     authenticator: DemoTokenAuthenticator
     ml_available: bool
@@ -58,7 +58,7 @@ def build_container(settings: Settings) -> Container:
     records = [synthetic_demo_patient(settings.demo_user_id)] if settings.demo_user_id else []
     patients = InMemoryPatientRepository(records)
     inference = RoutingInferenceService(load_classifier(settings))
-    harness = HealthFlowHarness(
+    harness = AutonomousHealthFlowHarness(
         intent_agent=IntentAgent(OllamaLLMProvider.from_settings(settings)),
         context_agent=PatientContextAgent(patients, PatientContextBuilder()),
         safety_engine=SafetyEngine(),
