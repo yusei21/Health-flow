@@ -28,7 +28,9 @@ export interface RoutingResponse {
   emergency_guidance: string | null;
   reason_codes: string[];
   safety_override: boolean;
-  disclaimer: string;\n  needs_more_information?: boolean;\n  follow_up_questions?: string[];
+  disclaimer: string;
+  needs_more_information?: boolean;
+  follow_up_questions?: string[];
 }
 
 /** Body of 401/404/503/500 responses (app/api/errors.py). */
