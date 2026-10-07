@@ -54,7 +54,11 @@ class SafetyEngine:
 
     @staticmethod
     def _matches_text(rule: SafetyRule, normalized_text: str) -> bool:
-        return any(\n            pattern in normalized_text\n            and not _negated_pattern(normalized_text, pattern)\n            for pattern in rule.text_patterns\n        )
+        return any(
+            pattern in normalized_text
+            and not _negated_pattern(normalized_text, pattern)
+            for pattern in rule.text_patterns
+        )
 
     @staticmethod
     def _matches_structured(
@@ -70,7 +74,6 @@ class SafetyEngine:
         if rule.min_severity is not None and extraction.severity.rank < rule.min_severity.rank:
             return False
         return not rule.age_ranges or age_range in rule.age_ranges
-
 
 
 def _negated_pattern(text: str, pattern: str) -> bool:
