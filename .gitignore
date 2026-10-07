@@ -13,6 +13,11 @@ htmlcov/
 .env.*
 !.env.example
 
+# Credentialed clinical data (MIMIC-IV-ED) — never commit or redistribute
+data/raw/mimic*/
+data/raw/mimic-iv-ed*/
+*.csv.gz
+
 # Generated artifacts (reproducible with `make train`)
 models/*
 !models/.gitkeep
