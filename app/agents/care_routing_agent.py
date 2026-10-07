@@ -19,7 +19,7 @@ class CareRoutingAgent:
         reasons: list[str] = []
         ml_level = self._ml_level(safety, ml, reasons)
         safety_floor = safety.suggested_minimum_care_level
-        final = most_severe(ml_level, safety_floor) or ML_UNAVAILABLE_FALLBACK
+        # An unvalidated synthetic ML prediction cannot independently trigger the\n        # highest-risk emergency pathway without a matched emergency safety rule.\n        if ml_level is CareLevel.EMERGENCY and safety_floor is not CareLevel.EMERGENCY:\n            ml_level = CareLevel.URGENT_CARE\n            reasons.append("ML_EMERGENCY_REQUIRES_VALIDATED_SAFETY_FLAG")\n        final = most_severe(ml_level, safety_floor) or ML_UNAVAILABLE_FALLBACK
 
         override = safety_floor is not None and (
             ml_level is None or safety_floor.rank > ml_level.rank
