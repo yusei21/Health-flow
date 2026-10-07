@@ -66,6 +66,36 @@ curl -s -X POST localhost:8000/api/v1/routing \
 }
 ```
 
+### Interface web (demonstração)
+
+Um frontend temporário (React + TypeScript + Vite, em `frontend/`) consome `POST /api/v1/routing`.
+
+No `.env` do backend, habilite o CORS para o Vite (somente desenvolvimento):
+
+```bash
+HEALTHFLOW_CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
+```
+
+```bash
+# Terminal 1
+make dev
+
+# Terminal 2
+cd frontend
+cp .env.example .env   # VITE_DEMO_TOKEN = mesmo valor de HEALTHFLOW_DEMO_AUTH_TOKEN
+npm install
+npm run dev
+```
+
+Abra <http://localhost:5173>. (Alternativas: `make dev-backend` / `make dev-frontend`, ou `make dev-all` em um único terminal.)
+
+- Ao clicar em **Usar minha localização**, o navegador pede permissão. A leitura é única (`getCurrentPosition`, sem `watchPosition`); latitude/longitude ficam apenas em memória e são enviadas somente ao backend.
+- A API exige latitude/longitude; sem localização o botão **Buscar atendimento** fica desabilitado. Nenhuma coordenada fictícia é usada.
+- A Geolocation API só funciona em **contexto seguro**: `localhost` em desenvolvimento ou **HTTPS** em produção. Um IP de rede (`http://192.168.x.x:5173`) não terá acesso à localização.
+- Testar no celular (Android + Chrome): conecte via USB com depuração ativa, rode `adb reverse tcp:5173 tcp:5173 && adb reverse tcp:8000 tcp:8000` e abra `http://localhost:5173` no celular. Fora disso, sirva o frontend e a API por HTTPS.
+- `VITE_DEMO_TOKEN` é embutido no bundle do navegador: use apenas o token de demonstração, nunca um segredo real. `frontend/.env` não é versionado.
+- Testes e build: `cd frontend && npm test && npm run build`.
+
 ### Rotas
 
 | Método | Rota | Auth |

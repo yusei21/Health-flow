@@ -1,4 +1,4 @@
-.PHONY: install dev test test-ollama lint format typecheck check up down \
+.PHONY: install dev dev-backend dev-frontend dev-all test test-ollama lint format typecheck check up down \
 	dataset train evaluate dataset-synthetic train-synthetic evaluate-synthetic \
 	dataset-mimic train-mimic evaluate-mimic dataset-triagegeist train-triagegeist \
 	evaluate-triagegeist benchmark-ml benchmark-summary
@@ -8,6 +8,16 @@ install:
 
 dev:
 	uv run uvicorn app.main:app --reload --port 8000
+
+dev-backend: dev
+
+# Temporary demo frontend (Vite on http://localhost:5173). Requires `npm install` in frontend/.
+dev-frontend:
+	cd frontend && npm run dev
+
+# Backend + frontend in one terminal; Ctrl+C stops both.
+dev-all:
+	@trap 'kill 0' INT TERM; $(MAKE) dev-backend & $(MAKE) dev-frontend & wait
 
 test:
 	uv run pytest
