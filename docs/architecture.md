@@ -26,7 +26,7 @@ Estilo: **monólito modular FastAPI**. Sem filas, microsserviços ou orquestrado
 |---|---|---|
 | Onde existe IA generativa? | LLM local (Ollama, `qwen3:4b`) converte texto livre em JSON tipado | `app/llm/`, `app/agents/intent_agent.py` |
 | Onde existe Machine Learning? | Classificador supervisionado treinado (scikit-learn) sugere o nível de encaminhamento | `app/ml/` — ver [machine-learning.md](machine-learning.md) |
-| Onde existe Agent Harness? | Máquina de estados explícita que coordena etapas, falhas e autoridade | `app/harness/` |
+| Onde existe Agent Harness? | Harness autônomo orientado a estado: um *planner* escolhe a próxima ação num conjunto **fechado**, uma *policy* valida, um *executor* executa | `app/harness/` |
 | Onde existe RAG? | Ainda não implementado (Fase G). Postgres com pgvector já provisionado | `scripts/db/init-pgvector.sql` |
 
 ### Por que LLM e ML são coisas diferentes aqui
@@ -45,40 +45,199 @@ Estilo: **monólito modular FastAPI**. Sem filas, microsserviços ou orquestrado
 LLM entende.  ML classifica.  Regras protegem.  Tools consultam.  Harness coordena.
 ```
 
-## Fluxo da Etapa 1
+## Agent Harness autônomo (Etapa 1)
 
-```mermaid
-flowchart TD
-    REQ[POST /api/v1/routing<br/>Bearer token] --> H[HealthFlowHarness]
-    H --> E[extract_user_report<br/>IntentAgent → LLMProvider]
-    E --> C[build_patient_context<br/>PatientContextAgent → PatientContextBuilder]
-    C --> S[run_safety_assessment<br/>SafetyEngine]
-    S -->|red flag| R[apply_routing_rules<br/>CareRoutingAgent]
-    S -->|sem red flag| M[run_ml_classifier<br/>RoutingInferenceService]
-    M --> R
-    R --> F[find_facilities<br/>NavigationAgent → FacilityProvider]
-    F --> OUT[build_routing_response]
+**Autonomia aqui = escolher dinamicamente o próximo passo entre ações permitidas.** Não significa deixar
+um LLM executar operações arbitrárias: nada fora do enum `HarnessAction` pode rodar, seja qual for o
+*planner*.
+
+```text
+AutonomousHealthFlowHarness            app/harness/autonomous_harness.py
+├── Planner        (Protocol)          app/harness/planner.py   next_action(state) -> PlannedAction
+│   ├── DeterministicPlanner           padrão; regras sobre o HarnessState
+│   └── LLMPlanner                     futuro, experimental (não implementado)
+├── HarnessPolicy  (policy/guard)      app/harness/policy.py    validate(action, state)
+├── ActionExecutor (registry)          app/harness/executor.py  um handler tipado por ação
+├── HarnessState                       app/harness/state.py     dados + trilha de auditoria
+└── HarnessLimits  (termination guards)                         passos, LLM, tools, timeout
 ```
 
-`HarnessState` acumula: `request_id`, `user_id`, `user_message` (só em memória), `extracted_symptoms`,
-`patient_context`, `safety_assessment`, `ml_prediction`, `routing_decision`, `facilities`, `errors`.
-Cada etapa é um método público testável isoladamente e envolto em `trace_stage` (log de etapa,
-duração e status; ponto único para adicionar OpenTelemetry depois).
+### Loop controlado
+
+```python
+while not state.finished:
+    planned = planner.next_action(state)  # propõe UMA ação + reason_code
+    policy.validate(planned, state)  # ordem de segurança, conjunto permitido, orçamentos
+    await executor.execute(planned, state)  # handler do registry; registra histórico
+```
+
+O loop roda dentro de `asyncio.timeout(HarnessLimits.timeout_seconds)`. Qualquer violação da *policy*
+ou estouro de orçamento **interrompe** a execução com erro controlado (`HarnessPolicyError`,
+`HarnessLimitError` ou `HarnessTimeoutError`): o harness nunca "tenta outra coisa" por conta própria.
+
+### Ações permitidas (`HarnessAction`)
+
+| Ação | Componente | Tipo (orçamento) |
+|---|---|---|
+| `SAFETY_PRECHECK` | `SafetyEngine.assess(texto_bruto, None, None)`: só padrões de texto, **antes do LLM** | interna |
+| `EXTRACT_SYMPTOMS` | `IntentAgent` → `LLMProvider` | LLM |
+| `LOAD_PATIENT_CONTEXT` | `PatientContextAgent` → repositório + minimização | tool |
+| `RUN_SAFETY_ASSESSMENT` | `SafetyEngine.assess(texto, extração, contexto)` | interna |
+| `RUN_ML` | `RoutingInferenceService` | tool |
+| `APPLY_ROUTING` | `CareRoutingAgent.decide(piso efetivo, ML)` | interna |
+| `SEARCH_FACILITIES` | `NavigationAgent` → `FacilityProvider` | tool |
+| `FINALIZE` | marca `finished` e `finish_reason` | interna |
+
+### Fluxo
+
+```text
+                    ┌──────────────────┐
+  POST /routing ──▶ │ SAFETY_PRECHECK  │  regras de texto no relato bruto
+                    └────────┬─────────┘
+             red flag? ──────┼──────────── não
+                 │                          │
+                 │                 ┌────────▼─────────┐
+                 │                 │ EXTRACT_SYMPTOMS │  LLM (1 chamada no máximo)
+                 │                 └────────┬─────────┘
+                 │          falhou ─────────┼────────── ok
+                 │            │             │
+                 │            ▼    ┌────────▼──────────────┐
+                 │        FINALIZE │ LOAD_PATIENT_CONTEXT  │
+                 │   (erro LLM 503)└────────┬──────────────┘
+                 │                 ┌────────▼──────────────┐
+                 │                 │ RUN_SAFETY_ASSESSMENT │  texto + estrutura + idade
+                 │                 └────────┬──────────────┘
+                 │                red flag? ┼─── não
+                 │                   │      │
+                 │                   │  ┌───▼────┐
+                 │                   │  │ RUN_ML │  falha → fallback URGENT_CARE
+                 │                   │  └───┬────┘
+                 ▼                   ▼      ▼
+              ┌──────────────────────────────────┐
+              │ APPLY_ROUTING  (piso efetivo+ML) │  nível final ≥ piso de segurança
+              └────────────────┬─────────────────┘
+              ┌────────────────▼─────────────────┐
+              │ SEARCH_FACILITIES                │  falha → mantém decisão, facility: null
+              └────────────────┬─────────────────┘
+                          ┌────▼─────┐
+                          │ FINALIZE │ → build_routing_response
+                          └──────────┘
+```
+
+| Caso | Sequência |
+|---|---|
+| Não crítico | `SAFETY_PRECHECK → EXTRACT_SYMPTOMS → LOAD_PATIENT_CONTEXT → RUN_SAFETY_ASSESSMENT → RUN_ML → APPLY_ROUTING → SEARCH_FACILITIES → FINALIZE` |
+| *Red flag* no texto bruto | `SAFETY_PRECHECK → APPLY_ROUTING → SEARCH_FACILITIES → FINALIZE` (sem LLM, sem ML) |
+| *Red flag* só após a extração | `… → RUN_SAFETY_ASSESSMENT → APPLY_ROUTING → SEARCH_FACILITIES → FINALIZE` (sem ML) |
+| LLM falha, sem *red flag* | `SAFETY_PRECHECK → EXTRACT_SYMPTOMS → FINALIZE` → HTTP 503 com lembrete do SAMU 192 |
+
+### Planner
+
+`Planner` é um `Protocol` com um método: `next_action(state) -> PlannedAction(action, reason_code)`.
+O `DeterministicPlanner` é o padrão: regras curtas e ordenadas sobre o estado, que **pulam etapas
+desnecessárias** (LLM e ML numa *red flag* do precheck, ML em qualquer *red flag*). Cada decisão leva um
+`reason_code` (`ReasonCode`), por exemplo `PRECHECK_RED_FLAG_SKIP_LLM_AND_ML` ou `RED_FLAG_SKIP_ML`.
+
+### Policy / guard (autoridade acima do planner)
+
+`HarnessPolicy.validate` roda **antes de toda ação**, para qualquer *planner*:
+
+- a ação pertence ao conjunto permitido para o `Intent` da requisição;
+- a execução não terminou e a ação ainda não foi executada (cada ação roda no máximo uma vez);
+- orçamentos de passos, chamadas de LLM e chamadas de tools;
+- pré-condições de segurança:
+  - `SAFETY_PRECHECK` é sempre a primeira ação;
+  - `EXTRACT_SYMPTOMS` é **proibida** se o precheck achou *red flag* (não esperar o LLM);
+  - `RUN_ML` só depois de `RUN_SAFETY_ASSESSMENT`, com extração e contexto, e **nunca** com *red flag*;
+  - `APPLY_ROUTING` exige os pisos conhecidos (*red flag* do precheck ou avaliação completa) e, sem
+    *red flag*, que o ML tenha sido **tentado** (preserva o fallback conservador em vez de pular o ML);
+  - `SEARCH_FACILITIES` exige decisão de *routing*; `FINALIZE` exige decisão ou erro controlado.
+
+O **piso efetivo** (`HarnessState.effective_safety`) combina precheck e avaliação completa: união das
+regras e o nível mínimo **mais severo**. Uma etapa posterior só pode adicionar regras ou subir o piso.
+O `SafetyEngine` não foi alterado.
+
+### Executor
+
+`ActionExecutor` mantém um *registry* `dict[HarnessAction, handler]`, verificado na construção (toda ação
+tem handler). Para cada ação ele incrementa `step_count` e o contador do orçamento correspondente
+(tentativas contam, mesmo com falha), executa dentro de `trace_stage` e registra um `ActionRecord`. As
+degradações são as mesmas do harness linear: LLM falha → erro registrado; ML falha → fallback
+`URGENT_CARE` no `CareRoutingAgent`; busca de unidades falha → decisão mantida, `facility: null`.
+
+### HarnessState
+
+Dados: `request_id`, `user_id`, `user_message` (só em memória), `intent`, `safety_precheck`,
+`extracted_symptoms`, `patient_context`, `safety_assessment`, `ml_prediction`, `routing_decision`,
+`facilities`, `errors`.
+
+Controle e auditoria: `completed_actions`, `action_history` (`step`, `action`, `reason_code`, `status`,
+`duration_ms`), `step_count`, `llm_call_count`, `tool_call_count`, `finished`, `finish_reason`
+(`completed`, `llm_unavailable`, `policy_violation`, `step_limit`, `llm_call_limit`, `tool_call_limit`,
+`timeout`).
+
+### Termination guards (`HarnessLimits`)
+
+| Guarda | Padrão | Motivo |
+|---|---|---|
+| `max_steps` | 10 | o caminho legítimo mais longo tem 8 passos |
+| `max_llm_calls` | 1 | uma extração por requisição |
+| `max_tool_calls` | 3 | contexto + ML + unidades |
+| `timeout_seconds` | 90 | acima do timeout × retries do cliente LLM, que deve disparar antes |
+
+Além disso, "cada ação no máximo uma vez" torna impossível um *loop* infinito mesmo sem os limites.
+
+### Auditoria
+
+Cada decisão gera o log `planner_decision` com `request_id`, `current_action`, `next_action`,
+`reason_code` e `step_count`. O fim gera `harness_finished` (ou `harness_aborted`) com `finish_reason`,
+contadores e a lista de ações. **Nunca** com o relato, o prompt ou o prontuário (há teste para isso).
+
+### Pipeline linear × harness autônomo
+
+| | `HealthFlowHarness` (linear, removido) | `AutonomousHealthFlowHarness` |
+|---|---|---|
+| Ordem | fixa no código de `run()` | escolhida a cada passo pelo *planner* a partir do estado |
+| *Red flag* no texto | o LLM era chamado mesmo assim | decidido no precheck, **sem esperar o LLM** |
+| Garantias de ordem | implícitas na sequência | explícitas e testadas na *policy*, válidas para qualquer *planner* |
+| Limites | nenhum | passos, LLM, tools e timeout global |
+| Auditoria | log por etapa | log por decisão (com `reason_code`) + `action_history` no estado |
+| Extensão | editar `run()` | novo *planner* ou novas ações registradas, sem mudar o loop |
+
+O contrato de `POST /api/v1/routing` não mudou. A única diferença observável é que, quando o texto bruto
+já dispara uma *red flag*, a resposta de emergência sai sem chamar o LLM.
+
+### Extensão futura: intents
+
+`Intent` já tem `CARE_ROUTING`, `MEDICATION` e `INSURANCE`, mas só `CARE_ROUTING` tem ações permitidas
+(`ALLOWED_ACTIONS`). Para as outras, a *policy* recusa qualquer ação. `MedicationAgent` e
+`InsuranceAgent` serão novas ações registradas no executor, com seu próprio conjunto permitido e o mesmo
+loop.
+
+### LLMPlanner (futuro, experimental)
+
+O mesmo `Protocol`. O LLM receberia **só** o resumo estruturado do estado (ações já feitas, flags, sem
+relato nem prontuário) e escolheria uma ação do enum por saída estruturada. A *policy* continua sendo a
+autoridade: uma escolha inválida aborta. Deve ficar atrás de configuração, ser comparado ao
+`DeterministicPlanner` por *replay* de casos e nunca ser o padrão sem avaliação.
 
 ## Invariantes de segurança
 
 1. **Nível final ≥ piso do Safety Engine** e **≥ predição do ML**. Implementado em
    `CareRoutingAgent.decide` e testado para todas as combinações (`tests/safety/test_care_routing.py`).
    `Safety=EMERGENCY` + `ML=PRIMARY_CARE` → `EMERGENCY`.
-2. Com *red flag*, o ML nem é executado.
+2. Com *red flag*, o ML nem é executado; com *red flag* no texto bruto (precheck), nem o LLM. A *policy*
+   impõe isso a qualquer *planner*.
 3. As regras também procuram padrões no **texto bruto** (sem acento, minúsculo). Se o LLM falhar ou
    não extrair o sinal crítico, a regra ainda dispara. Negações não são interpretadas — de propósito,
    o erro fica do lado seguro.
-4. **LLM indisponível**: se o texto bruto disparar *red flag* → resposta de emergência mesmo assim;
-   caso contrário → HTTP 503 com mensagem segura e lembrete do SAMU 192.
+4. **LLM indisponível**: se o texto bruto disparar *red flag*, o precheck já decide (o LLM nem é
+   chamado); caso contrário → HTTP 503 com mensagem segura e lembrete do SAMU 192.
 5. **ML indisponível** → fallback conservador `URGENT_CARE`.
 6. **Nenhuma unidade encontrada** → resposta mantém o nível e a orientação, com `facility: null`.
 7. A resposta não tem campo de diagnóstico; o sistema **não aciona** o SAMU — apenas orienta ligar 192.
+8. Nenhum *planner*, LLM, ML ou agente reduz um piso: o piso efetivo só sobe ao longo da execução.
+9. Orçamentos e timeout global impedem *loops*; violações abortam com erro controlado.
 
 ## Safety Engine
 
@@ -150,7 +309,8 @@ app/
 ├── core/                      # config, exceções, logging estruturado
 ├── auth/                      # Principal, DemoTokenAuthenticator
 ├── agents/                    # intent, patient_context, care_routing, navigation
-├── harness/                   # HealthFlowHarness, HarnessState, montagem da resposta
+├── harness/                   # AutonomousHealthFlowHarness, planner, policy, executor,
+│                              # actions, HarnessState, montagem da resposta
 ├── llm/                       # LLMProvider, OllamaLLMProvider
 ├── ml/                        # data/ (fontes → esquema canônico), feature builders, splits,
 │                              # métricas, experimentos, classifier, inference, training/
@@ -164,7 +324,7 @@ tests/{unit,safety,ml,integration}
 
 Diferenças deliberadas em relação ao rascunho anterior:
 
-- Não existe `safety_agent.py`: o Safety Engine é determinístico e chamado diretamente pelo Harness —
+- Não existe `safety_agent.py`: o Safety Engine é determinístico e chamado diretamente pelo executor —
   chamá-lo de "agente" esconderia que ele não depende de modelo algum.
 - `rag/`, `services/` e `repositories/routing.py` só serão criados nas fases que os usam (YAGNI).
 - `FacilityProvider.find_nearby` recebe `service_type` (não `care_level`): o mapeamento

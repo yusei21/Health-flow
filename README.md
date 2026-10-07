@@ -27,7 +27,7 @@ Login → prontuário autorizado → relato em texto livre
 | **LLM** (`qwen3:4b` via Ollama) | entende linguagem natural → JSON validado |
 | **Machine Learning** (scikit-learn) | classificação probabilística auxiliar |
 | **Safety Engine** | regras críticas com ID; sempre prevalece |
-| **Agent Harness** | coordena etapas, falhas e quem tem autoridade |
+| **Agent Harness** | escolhe a próxima ação num conjunto fechado; a *policy* de segurança valida cada passo |
 | **Tools** | busca de unidades (provider simulado) |
 
 Detalhes: [docs/architecture.md](docs/architecture.md) · ML (pipelines, modelos, métricas, limitações): [docs/machine-learning.md](docs/machine-learning.md) · Dados (sintético, MIMIC-IV-ED, Triagegeist, domain shift): [docs/datasets.md](docs/datasets.md)
