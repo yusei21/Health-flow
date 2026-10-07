@@ -6,6 +6,7 @@ Usage: uv run python benchmarks/scripts/summarize_results.py [benchmarks/results
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 COLUMNS = (
     "timestamp",
@@ -16,10 +17,13 @@ COLUMNS = (
     "rows",
     "patients",
     "cv_macro_f1",
+    "test_accuracy",
     "test_macro_f1",
     "test_emergency_recall",
     "test_under_triage",
     "test_critical_under_triage",
+    "train_s",
+    "converged",
     "git_commit",
 )
 
@@ -27,6 +31,14 @@ COLUMNS = (
 def _short_commit(commit: str) -> str:
     # Keep the -dirty marker visible: such runs must not be cited.
     return commit[:12] + (" (dirty)" if commit.endswith("-dirty") else "")
+
+
+def _converged(record: dict[str, Any]) -> str:
+    # Records written before diagnostics existed have no convergence information.
+    diagnostics = record.get("training_diagnostics")
+    if not diagnostics:
+        return "n/a"
+    return "yes" if diagnostics["converged"] else "NO"
 
 
 def summarize(directory: Path) -> str:
@@ -43,10 +55,13 @@ def summarize(directory: Path) -> str:
             record["number_of_rows"],
             record["number_of_patients"] or "n/a",
             f"{cv['macro_f1']:.4f}",
+            f"{test['accuracy']:.4f}",
             f"{test['macro_f1']:.4f}",
             f"{test['emergency_recall']:.4f}",
             f"{test['under_triage_rate']:.4f}",
             f"{test['critical_under_triage_rate']:.4f}",
+            f"{record['training_time_seconds']:.3f}",
+            _converged(record),
             _short_commit(record["git_commit"]),
         )
         lines.append("| " + " | ".join(str(cell) for cell in cells) + " |")
