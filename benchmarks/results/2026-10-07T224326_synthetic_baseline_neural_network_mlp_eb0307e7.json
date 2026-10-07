@@ -1,0 +1,215 @@
+{
+  "run_id": "eb0307e706c44673b5cee8edf585d4c2",
+  "timestamp": "2026-10-07T22:43:26.025415+00:00",
+  "git_commit": "f0ac6ebf9e8cbe77aabf0d00760e5a6db0b3e0be",
+  "git_dirty": false,
+  "experiment": "synthetic_baseline",
+  "dataset_name": "synthetic",
+  "dataset_version": "synthetic-v1",
+  "data_disclaimer": "ACADEMIC / SYNTHETIC DATA — NOT FOR CLINICAL USE",
+  "label_definition": "Labels produced by a hand-written generative process (see module docstring).",
+  "number_of_rows": 4000,
+  "number_of_patients": null,
+  "train_rows": 3200,
+  "test_rows": 800,
+  "feature_set": "healthflow-symptoms-v1",
+  "features": [
+    "symptom__chest_pain",
+    "symptom__shortness_of_breath",
+    "symptom__loss_of_consciousness",
+    "symptom__seizure",
+    "symptom__facial_droop",
+    "symptom__slurred_speech",
+    "symptom__one_sided_weakness",
+    "symptom__severe_bleeding",
+    "symptom__self_harm_ideation",
+    "symptom__fever",
+    "symptom__cough",
+    "symptom__sore_throat",
+    "symptom__runny_nose",
+    "symptom__headache",
+    "symptom__abdominal_pain",
+    "symptom__vomiting",
+    "symptom__diarrhea",
+    "symptom__dizziness",
+    "symptom__rash",
+    "symptom__back_pain",
+    "symptom__fatigue",
+    "symptom__injury",
+    "symptom_count",
+    "severity_rank",
+    "severity_unknown",
+    "duration_log_hours",
+    "duration_unknown",
+    "age_range_rank",
+    "age_unknown",
+    "risk__cardiovascular_disease",
+    "risk__chronic_respiratory_disease",
+    "risk__diabetes",
+    "risk__immunosuppression",
+    "risk__pregnancy"
+  ],
+  "split_strategy": "stratified_row_80_20__cv_stratified_kfold_5",
+  "random_state": 42,
+  "model_name": "neural_network_mlp",
+  "hyperparameters": {
+    "impute": {
+      "add_indicator": true,
+      "copy": true,
+      "fill_value": null,
+      "keep_empty_features": false,
+      "missing_values": "nan",
+      "strategy": "median"
+    },
+    "scale": {
+      "copy": true,
+      "with_mean": true,
+      "with_std": true
+    },
+    "model": {
+      "activation": "relu",
+      "alpha": 0.0001,
+      "batch_size": "auto",
+      "beta_1": 0.9,
+      "beta_2": 0.999,
+      "early_stopping": true,
+      "epsilon": 1e-08,
+      "hidden_layer_sizes": [
+        64,
+        32
+      ],
+      "learning_rate": "constant",
+      "learning_rate_init": 0.001,
+      "max_fun": 15000,
+      "max_iter": 500,
+      "momentum": 0.9,
+      "n_iter_no_change": 20,
+      "nesterovs_momentum": true,
+      "power_t": 0.5,
+      "random_state": 42,
+      "shuffle": true,
+      "solver": "adam",
+      "tol": 0.0001,
+      "validation_fraction": 0.1,
+      "verbose": false,
+      "warm_start": false
+    }
+  },
+  "selection_criterion": "max(round(cv_emergency_recall, 2), cv_macro_f1)",
+  "selected_for_deployment": false,
+  "cross_validation_metrics": {
+    "accuracy": 0.8844,
+    "macro_precision": 0.8681,
+    "macro_recall": 0.8455,
+    "macro_f1": 0.8556,
+    "emergency_recall": 0.7559,
+    "under_triage_rate": 0.0737,
+    "over_triage_rate": 0.0419,
+    "critical_under_triage_rate": 0.2441,
+    "per_class": {
+      "PRIMARY_CARE": {
+        "precision": 0.9231,
+        "recall": 0.9559,
+        "f1": 0.9392,
+        "support": 1745
+      },
+      "URGENT_CARE": {
+        "precision": 0.8194,
+        "recall": 0.8248,
+        "f1": 0.8221,
+        "support": 902
+      },
+      "EMERGENCY": {
+        "precision": 0.8619,
+        "recall": 0.7559,
+        "f1": 0.8054,
+        "support": 553
+      }
+    },
+    "confusion_matrix_labels": [
+      "PRIMARY_CARE",
+      "URGENT_CARE",
+      "EMERGENCY"
+    ],
+    "confusion_matrix": [
+      [
+        1668,
+        67,
+        10
+      ],
+      [
+        101,
+        744,
+        57
+      ],
+      [
+        38,
+        97,
+        418
+      ]
+    ]
+  },
+  "test_metrics": {
+    "accuracy": 0.9113,
+    "macro_precision": 0.8939,
+    "macro_recall": 0.8808,
+    "macro_f1": 0.8861,
+    "emergency_recall": 0.7899,
+    "under_triage_rate": 0.0537,
+    "over_triage_rate": 0.035,
+    "critical_under_triage_rate": 0.2101,
+    "per_class": {
+      "PRIMARY_CARE": {
+        "precision": 0.9609,
+        "recall": 0.9587,
+        "f1": 0.9598,
+        "support": 436
+      },
+      "URGENT_CARE": {
+        "precision": 0.8347,
+        "recall": 0.8938,
+        "f1": 0.8632,
+        "support": 226
+      },
+      "EMERGENCY": {
+        "precision": 0.8862,
+        "recall": 0.7899,
+        "f1": 0.8352,
+        "support": 138
+      }
+    },
+    "confusion_matrix_labels": [
+      "PRIMARY_CARE",
+      "URGENT_CARE",
+      "EMERGENCY"
+    ],
+    "confusion_matrix": [
+      [
+        418,
+        14,
+        4
+      ],
+      [
+        14,
+        202,
+        10
+      ],
+      [
+        3,
+        26,
+        109
+      ]
+    ]
+  },
+  "training_time_seconds": 0.351,
+  "inference_time_seconds": 0.0014,
+  "inference_time_ms_per_row": 0.00173,
+  "training_diagnostics": {
+    "converged": true,
+    "convergence_warnings": [],
+    "cv_convergence_warning_count": 0,
+    "n_iter": 52,
+    "stopped_early": true,
+    "best_internal_validation_score": 0.9031
+  }
+}
