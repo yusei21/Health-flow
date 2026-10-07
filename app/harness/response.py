@@ -1,3 +1,4 @@
+from app.harness.actions import HarnessAction
 from app.harness.state import HarnessState
 from app.schemas.care import CareLevel
 from app.schemas.routing import FacilityResponse, RoutingResponse
@@ -36,7 +37,7 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
         if nearest
         else None
     )
-    facility_lookup_failed = any(error.stage.value == "SEARCH_FACILITIES" for error in state.errors)
+    facility_lookup_failed = any(error.stage is HarnessAction.SEARCH_FACILITIES for error in state.errors)
     no_facility_note = (
         " A busca de unidades está temporariamente indisponível; não significa que não existam unidades próximas."
         if facility_lookup_failed
