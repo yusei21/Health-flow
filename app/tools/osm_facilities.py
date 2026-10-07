@@ -2,6 +2,7 @@
 import logging
 
 import httpx
+
 from app.core.exceptions import FacilityProviderError
 from app.schemas.care import ServiceType
 from app.schemas.facility import Facility, FacilityMatch
@@ -21,7 +22,8 @@ class OpenStreetMapFacilityProvider:
             "[out:json][timeout:15];("
             f'nwr(around:{radius},{latitude},{longitude})["amenity"~"hospital|clinic"];'
             f'nwr(around:{radius},{latitude},{longitude})["healthcare"~"hospital|clinic|centre"];'
-            f'nwr(around:{radius},{latitude},{longitude})["name"~"UPA|UBS|Pronto Atendimento|Pronto Socorro|Unidade B[aá]sica",i];'
+            f'nwr(around:{radius},{latitude},{longitude})'
+            '["name"~"UPA|UBS|Pronto Atendimento|Pronto Socorro|Unidade B[aá]sica",i];'
             ");out center;"
         )
         elements = None
@@ -76,7 +78,11 @@ class OpenStreetMapFacilityProvider:
 def _compatible(name: str, tags: dict[str, str], service: ServiceType) -> bool:
     value = name.casefold()
     if service is ServiceType.UPA:
-        return "upa" in value.split() or "pronto atendimento" in value or "pronto-atendimento" in value
+        return (
+            "upa" in value.split()
+            or "pronto atendimento" in value
+            or "pronto-atendimento" in value
+        )
     if service is ServiceType.UBS:
         return ("ubs" in value.split() or "unidade básica" in value
                 or "unidade basica" in value or "posto de saúde" in value)
