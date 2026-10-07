@@ -37,9 +37,12 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
         if nearest
         else None
     )
-    facility_lookup_failed = any(\n        error.stage is HarnessAction.SEARCH_FACILITIES for error in state.errors\n    )
+    facility_lookup_failed = any(
+        error.stage is HarnessAction.SEARCH_FACILITIES for error in state.errors
+    )
     no_facility_note = (
-        " A busca de unidades está temporariamente indisponível; "\n        "não significa que não existam unidades próximas."
+        " A busca de unidades está temporariamente indisponível; "
+        "não significa que não existam unidades próximas."
         if facility_lookup_failed
         else _NO_FACILITY
     )
