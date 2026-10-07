@@ -97,11 +97,9 @@ def test_mild_complaint_has_no_floor() -> None:
     )
 
 
-def test_text_matching_errs_on_the_side_of_caution_with_negation() -> None:
-    # Documented trade-off: negations are not parsed, so this over-triggers on purpose.
+def test_explicit_negation_does_not_trigger_fainting_red_flag() -> None:
     red_flag, _, _ = assess(text="não desmaiei, só fiquei tonto", with_extraction=False)
-    assert red_flag
-
+    assert not red_flag
 
 def test_normalize_text_removes_accents_case_and_extra_spaces() -> None:
     assert normalize_text("  Não   CONSIGO respirar ") == "nao consigo respirar"
