@@ -1,8 +1,8 @@
 # Machine Learning — classificador de encaminhamento
 
 > **PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS.**
-> Nenhuma métrica aqui é evidência clínica. Detalhes dos dados, do MIMIC-IV-ED e do domain shift em
-> [datasets.md](datasets.md).
+> Nenhuma métrica aqui é evidência clínica. Detalhes dos dados, do MIMIC-IV-ED, do Triagegeist e do
+> domain shift em [datasets.md](datasets.md).
 
 ## Problema
 
@@ -21,12 +21,16 @@ app/ml/
 ├── data/
 │   ├── schemas.py        RoutingTrainingExample (esquema canônico), DatasetInfo, TrainingDataset
 │   ├── base.py           CSV canônico processado + sidecar .meta.json
+│   ├── parsing.py        helpers de leitura (números, .csv/.csv.gz) compartilhados
 │   ├── synthetic.py      gerador sintético-v1 → esquema canônico
-│   └── mimic_ed.py       triage do MIMIC-IV-ED → esquema canônico; map_esi_to_care_level
+│   ├── mimic_ed.py       triage do MIMIC-IV-ED → esquema canônico; map_esi_to_care_level
+│   └── triagegeist.py    train.csv do Triagegeist → esquema canônico; detect_columns,
+│                         map_triage_acuity_to_care_level
 ├── features.py           features de sintomas da API (fonte única de verdade para inferência)
 ├── feature_builders.py   um builder por feature set:
 │                           HealthFlowSymptomFeatureBuilder  (healthflow-symptoms-v1)
 │                           MimicStructuredFeatureBuilder    (mimic-structured-vitals-v1)
+│                           TriagegeistStructuredFeatureBuilder (triagegeist-structured-v1)
 ├── splits.py             split treino/teste e folds de CV (por paciente quando há group_id)
 ├── metrics.py            métricas, incluindo under/over-triage
 ├── experiments.py        registro: experimento → dataset, feature set, diretório do modelo
@@ -35,14 +39,17 @@ app/ml/
 └── training/
     ├── dataset.py        CLI make dataset-synthetic
     ├── prepare_mimic.py  CLI make dataset-mimic
+    ├── prepare_triagegeist.py CLI make dataset-triagegeist
     ├── train.py          CLI make train-* (compara, seleciona, salva, grava benchmarks)
     ├── evaluate.py       CLI make evaluate-* (só no teste reservado)
     └── benchmark.py      registro JSON imutável por execução
 ```
 
 Não há `if dataset == ...`: cada fonte converte para o esquema canônico e cada feature set tem seu
-builder. A API só aceita modelos do feature set `healthflow-symptoms-v1`. Um modelo de sinais vitais é
-**recusado** na inicialização, porque a API não tem sinais vitais.
+builder. Há uma separação clara entre as **features de sintomas da API** (`healthflow-symptoms-v1`) e as
+**features estruturadas de triagem** (MIMIC e Triagegeist). A API só aceita modelos do feature set
+`healthflow-symptoms-v1`. Um modelo de sinais vitais (MIMIC ou Triagegeist) é **recusado** na
+inicialização, porque a API não tem sinais vitais.
 
 ## Experimentos
 
@@ -51,6 +58,7 @@ builder. A API só aceita modelos do feature set `healthflow-symptoms-v1`. Um mo
 | **A** `synthetic_baseline` | `synthetic-v1` (4000 linhas) | sintomas, intensidade, duração, faixa etária e fatores de risco (34 features) | ✅ executado |
 | **B** `structured_mimic_baseline` | MIMIC-IV-ED triage | FC, FR, SpO₂, PAS, PAD, temperatura (°C) e dor (7 features) | ✅ pipeline pronto; **sem resultados**: requer acesso credenciado aos dados |
 | **C** (planejado) | MIMIC-IV-ED `chiefcomplaint` → Qwen3 4B local → `SymptomExtraction` | features do Health-flow | ⏳ não implementado |
+| **T** `structured_triagegeist_baseline` | Kaggle Triagegeist `train.csv` | FC, FR, SpO₂, PAS, PAD, temperatura (°C), dor e faixa etária ordinal (8 features; as ausentes no CSV real ficam `NaN`) | ✅ pipeline pronto; **sem resultados**: requer download manual do Kaggle |
 
 A pergunta do artigo: **dados estruturados reais (B) × texto interpretado pelo LLM (C)**, com A como
 baseline acadêmico. A e B/C **não são diretamente comparáveis**: têm rótulos de natureza diferente
@@ -66,11 +74,12 @@ Todos usam `class_weight="balanced"` e `random_state=42`.
 - `DecisionTreeClassifier(max_depth=6, min_samples_leaf=10)`
 - `RandomForestClassifier(n_estimators=200, max_depth=10, min_samples_leaf=5)`
 
-XGBoost e busca de hiperparâmetros ficam fora por enquanto.
+XGBoost, MLP (`neural_network_mlp`) e busca de hiperparâmetros ficam fora por enquanto. A MLP não existe
+neste branch e não foi adicionada junto com o Triagegeist, para preservar o escopo.
 
 ## Protocolo de avaliação (sem vazamento)
 
-| Etapa | Sem pacientes identificados (A) | Com `subject_id` (B, C) |
+| Etapa | Sem pacientes identificados (A; T sem coluna de paciente) | Com ID de paciente (B, C; T com coluna de paciente) |
 |---|---|---|
 | Teste reservado (~20%) | `train_test_split` estratificado por linha | 1 de 5 *folds* de `StratifiedGroupKFold`: **nenhum paciente em treino e teste ao mesmo tempo** |
 | Validação cruzada (no treino) | `StratifiedKFold(5)` | `StratifiedGroupKFold(5)`: nenhum paciente em dois *folds* |
@@ -105,7 +114,8 @@ benchmarks/results/<timestamp>_<experimento>_<modelo>_<run_id>.json
 ```
 
 - Cada `make train-*` grava **um JSON por modelo candidato** com os mesmos campos, além de métricas de CV
-  e de teste, `training_time_seconds`, `inference_time_ms_per_row` e `selected_for_deployment`.
+  e de teste, `training_time_seconds`, `inference_time_seconds` (todo o teste reservado),
+  `inference_time_ms_per_row`, `git_dirty` e `selected_for_deployment`.
   Arquivos são abertos em modo exclusivo: **nunca sobrescrevem** execuções anteriores.
 - `git_commit` termina em `-dirty` se havia mudanças não commitadas. Para o artigo, rode com a árvore
   limpa.
@@ -150,6 +160,22 @@ make train-mimic
 make evaluate-mimic
 ```
 
+## Resultados — Experimento T (Triagegeist estruturado)
+
+**Ainda não há resultados.** Nenhum `train.csv` real estava em `data/raw/triagegeist/`. O pipeline foi
+verificado de ponta a ponta apenas com arquivos **falsos** (`tests/ml/fixtures/fake_triagegeist.py`).
+Com o arquivo baixado manualmente do Kaggle:
+
+```bash
+make dataset-triagegeist TRIAGEGEIST_SOURCE_VERSION=<versão>   # data/raw/triagegeist/train.csv
+make train-triagegeist
+make evaluate-triagegeist
+make benchmark-summary
+```
+
+Antes de interpretar, confira em `routing_triagegeist_v1.meta.json` o `column_mapping` detectado, a
+distribuição de classes, as linhas descartadas e `patient_level_split_possible`.
+
 ## Experimento C — o que falta
 
 1. CLI `app.ml.training.prepare_mimic_llm` com `--limit`/`--offset`, lendo
@@ -177,7 +203,9 @@ make evaluate-mimic
 ## Limitações
 
 - Experimento A: dados sintéticos. Experimento B: domain shift EUA × SUS, rótulo derivado do ESI por
-  regra do projeto, sem idade (ver [datasets.md](datasets.md)).
+  regra do projeto, sem idade (ver [datasets.md](datasets.md)). Experimento T: Triagegeist não
+  representa o SUS; schema real ainda não verificado no repositório; sem ID de paciente, o *split* é
+  por linha e não protege contra vazamento.
 - Sem calibração de probabilidades, sem análise de equidade entre grupos, sem intervalos de confiança.
 - Um único *split* de teste; variância entre *seeds* não estimada.
 - Sem validação clínica, sem aprovação regulatória.

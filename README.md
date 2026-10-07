@@ -30,7 +30,7 @@ Login → prontuário autorizado → relato em texto livre
 | **Agent Harness** | coordena etapas, falhas e quem tem autoridade |
 | **Tools** | busca de unidades (provider simulado) |
 
-Detalhes: [docs/architecture.md](docs/architecture.md) · ML (pipelines, modelos, métricas, limitações): [docs/machine-learning.md](docs/machine-learning.md) · Dados (sintético, MIMIC-IV-ED, domain shift): [docs/datasets.md](docs/datasets.md)
+Detalhes: [docs/architecture.md](docs/architecture.md) · ML (pipelines, modelos, métricas, limitações): [docs/machine-learning.md](docs/machine-learning.md) · Dados (sintético, MIMIC-IV-ED, Triagegeist, domain shift): [docs/datasets.md](docs/datasets.md)
 
 ## Executando
 
@@ -92,7 +92,10 @@ make dataset-synthetic / train-synthetic / evaluate-synthetic
 make dataset-mimic     # requer data/raw/mimic-iv-ed/triage.csv(.gz) — acesso credenciado PhysioNet
 make train-mimic       # → models/mimic-structured-v1/ + benchmarks/results/*.json
 make evaluate-mimic
-make benchmark-ml      # roda A sempre; B se o dataset MIMIC processado existir
+make dataset-triagegeist # requer data/raw/triagegeist/train.csv — download manual do Kaggle
+make train-triagegeist   # → models/triagegeist-structured-v1/ (não usado pela API)
+make evaluate-triagegeist
+make benchmark-ml      # roda A sempre; MIMIC/Triagegeist se o dataset processado existir
 make benchmark-summary # tabela Markdown dos resultados
 make up / down    # docker compose (api + postgres/pgvector)
 ```
