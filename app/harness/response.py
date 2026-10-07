@@ -36,13 +36,19 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
         if nearest
         else None
     )
+    facility_lookup_failed = any(error.stage.value == "SEARCH_FACILITIES" for error in state.errors)
+    no_facility_note = (
+        " A busca de unidades está temporariamente indisponível; não significa que não existam unidades próximas."
+        if facility_lookup_failed
+        else _NO_FACILITY
+    )
     is_emergency = decision.care_level is CareLevel.EMERGENCY
     return RoutingResponse(
         request_id=state.request_id,
         care_level=decision.care_level,
         recommended_service_type=decision.service_type,
         facility=facility,
-        next_step=_NEXT_STEP[decision.care_level] + ("" if facility else _NO_FACILITY),
+        next_step=_NEXT_STEP[decision.care_level] + ("" if facility else no_facility_note),
         emergency_guidance=EMERGENCY_GUIDANCE if is_emergency else None,
         reason_codes=decision.reason_codes,
         safety_override=decision.safety_override,
