@@ -54,7 +54,7 @@ class SafetyEngine:
 
     @staticmethod
     def _matches_text(rule: SafetyRule, normalized_text: str) -> bool:
-        return any(pattern in normalized_text for pattern in rule.text_patterns)
+        return any(\n            pattern in normalized_text\n            and not _negated_pattern(normalized_text, pattern)\n            for pattern in rule.text_patterns\n        )
 
     @staticmethod
     def _matches_structured(
@@ -70,3 +70,22 @@ class SafetyEngine:
         if rule.min_severity is not None and extraction.severity.rank < rule.min_severity.rank:
             return False
         return not rule.age_ranges or age_range in rule.age_ranges
+
+
+
+def _negated_pattern(text: str, pattern: str) -> bool:
+    """Conservative negation screen for common explicit statements in Portuguese.
+
+    Ambiguous phrases still require clinical review; no substring logic is clinically
+    reliable enough to replace professional assessment.
+    """
+    start = text.find(pattern)
+    while start >= 0:
+        prefix = text[max(0, start - 35):start].strip()
+        if not any(prefix.endswith(phrase) for phrase in (
+            "nao", "nunca", "nem", "sem", "nao tive", "nao estou",
+            "nao ha", "nego", "sem sinais de",
+        )):
+            return False
+        start = text.find(pattern, start + len(pattern))
+    return True
