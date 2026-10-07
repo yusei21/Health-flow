@@ -43,15 +43,15 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
         if facility_lookup_failed
         else _NO_FACILITY
     )
-    is_emergency = decision.care_level is CareLevel.EMERGENCY
+    extraction = state.extracted_symptoms\n    uncertain = (\n        not state.has_red_flag\n        and not (state.effective_safety and state.effective_safety.matched_rules)\n        and extraction is not None\n        and extraction.severity.value == "unknown"\n        and extraction.duration_minutes is None\n    )\n    questions = (\n        ["Quando começou e qual a intensidade do sintoma?",\n         "Há dor no peito, falta de ar, desmaio ou outro sinal de gravidade?",\n         "Houve acidente, ferimento ou piora rápida?"]\n        if uncertain else []\n    )\n    is_emergency = decision.care_level is CareLevel.EMERGENCY and not uncertain
     return RoutingResponse(
         request_id=state.request_id,
         care_level=decision.care_level,
         recommended_service_type=decision.service_type,
         facility=facility,
-        next_step=_NEXT_STEP[decision.care_level] + ("" if facility else no_facility_note),
+        next_step=(\n            "Não é possível determinar a gravidade apenas com esse relato. "\n            "Se houver sinais de risco imediato, acione o SAMU 192. "\n            "Caso contrário, procure avaliação profissional conforme os sintomas."\n            if uncertain else _NEXT_STEP[decision.care_level]\n        ) + ("" if facility else no_facility_note),
         emergency_guidance=EMERGENCY_GUIDANCE if is_emergency else None,
         reason_codes=decision.reason_codes,
         safety_override=decision.safety_override,
-        disclaimer=DISCLAIMER,
+        disclaimer=DISCLAIMER,\n        needs_more_information=uncertain,\n        follow_up_questions=questions,
     )
