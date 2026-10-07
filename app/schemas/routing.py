@@ -49,4 +49,4 @@ class RoutingResponse(BaseModel):
     emergency_guidance: str | None
     reason_codes: list[str]
     safety_override: bool
-    disclaimer: str
+    disclaimer: str\n    needs_more_information: bool = False\n    follow_up_questions: list[str] = Field(default_factory=list)\n
