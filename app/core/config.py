@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=30.0, gt=0)
     llm_max_retries: int = Field(default=1, ge=0, le=3)
 
-    ml_model_dir: Path = Path("models")
+    ml_model_dir: Path = Path("models/synthetic-v1")
     ml_low_confidence_threshold: float = Field(default=0.55, ge=0, le=1)
 
     facility_search_radius_km: float = Field(default=25.0, gt=0)

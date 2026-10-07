@@ -14,6 +14,7 @@ from app.core.exceptions import MLModelUnavailableError
 from app.harness.healthflow_harness import HealthFlowHarness
 from app.llm.ollama_provider import OllamaLLMProvider
 from app.ml.classifier import RoutingClassifier
+from app.ml.feature_builders import HealthFlowSymptomFeatureBuilder
 from app.ml.inference import RoutingInferenceService
 from app.repositories.patients import (
     InMemoryPatientRepository,
@@ -36,7 +37,10 @@ class Container:
 
 def load_classifier(settings: Settings) -> RoutingClassifier | None:
     try:
-        classifier = RoutingClassifier.load(settings.ml_model_dir)
+        # The API computes symptom features only; a vitals-based model cannot be served.
+        classifier = RoutingClassifier.load(
+            settings.ml_model_dir, expected_feature_set=HealthFlowSymptomFeatureBuilder.feature_set
+        )
     except MLModelUnavailableError as exc:
         logger.warning("ml_model_unavailable", extra={"reason": str(exc)})
         return None
@@ -44,7 +48,7 @@ def load_classifier(settings: Settings) -> RoutingClassifier | None:
         "ml_model_loaded",
         extra={
             "model_type": classifier.metadata.model_type,
-            "version": classifier.metadata.version,
+            "version": classifier.metadata.model_version,
         },
     )
     return classifier

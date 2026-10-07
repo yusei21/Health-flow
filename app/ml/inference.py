@@ -40,5 +40,5 @@ class RoutingInferenceService:
             predicted_class=predicted,
             confidence=by_level[predicted],
             probabilities=by_level,
-            model_version=self._classifier.metadata.version,
+            model_version=self._classifier.metadata.model_version,
         )
