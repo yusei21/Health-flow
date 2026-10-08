@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     ml_low_confidence_threshold: float = Field(default=0.55, ge=0, le=1)
 
     facility_search_radius_km: float = Field(default=25.0, gt=0)
+    cnes_database: Path | None = None
 
     demo_auth_token: SecretStr | None = None
     demo_user_id: UUID | None = None
