@@ -97,13 +97,15 @@ evaluate-triagegeist:
 	$(EVALUATE) --experiment structured_triagegeist_baseline --dataset $(TRIAGEGEIST_DATASET) \
 		--model-dir $(TRIAGEGEIST_MODEL_DIR)
 
-# Experiment A always; MIMIC and Triagegeist only when their processed datasets exist.
-benchmark-ml: train-synthetic
-	@if [ -f $(MIMIC_DATASET) ]; then $(MAKE) train-mimic; \
-	else echo "skipping MIMIC: $(MIMIC_DATASET) not found (run make dataset-mimic)"; fi
-	@if [ -f $(TRIAGEGEIST_DATASET) ]; then $(MAKE) train-triagegeist; \
-	else echo "skipping Triagegeist: $(TRIAGEGEIST_DATASET) not found" \
-		"(run make dataset-triagegeist)"; fi
+# Research benchmark only: never include the synthetic demo dataset implicitly.
+# Fails visibly rather than presenting demo metrics as real-world evidence.
+benchmark-ml:
+	@if [ ! -f "$(MIMIC_DATASET)" ] && [ ! -f "$(TRIAGEGEIST_DATASET)" ]; then \
+		echo "No processed external datasets available. Supply authorized data first."; exit 2; fi
+	@if [ -f "$(MIMIC_DATASET)" ]; then $(MAKE) train-mimic; \
+	else echo "skipping MIMIC: processed dataset unavailable"; fi
+	@if [ -f "$(TRIAGEGEIST_DATASET)" ]; then $(MAKE) train-triagegeist; \
+	else echo "skipping Triagegeist: processed dataset unavailable"; fi
 
 benchmark-summary:
 	uv run python benchmarks/scripts/summarize_results.py $(BENCHMARK_DIR)
