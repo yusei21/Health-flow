@@ -40,14 +40,16 @@ def follow_up_questions(message: str, extraction: SymptomExtraction | None) -> l
     report = normalize_text(message)
     questions: list[str] = []
 
-    if not (_DURATION.search(report) or (
-        extraction is not None and extraction.duration_minutes is not None
-    )):
+    has_duration = bool(_DURATION.search(report))
+    if extraction is not None and extraction.duration_minutes is not None:
+        has_duration = True
+    if not has_duration:
         questions.append("Quando começaram os sintomas?")
 
-    if not (_SEVERITY.search(report) or (
-        extraction is not None and extraction.severity.value != "unknown"
-    )):
+    has_severity = bool(_SEVERITY.search(report))
+    if extraction is not None and extraction.severity.value != "unknown":
+        has_severity = True
+    if not has_severity:
         questions.append("Qual é a intensidade da dor ou do sintoma (leve, moderada ou forte)?")
 
     if not _EMERGENCY_SIGNS.search(report):
@@ -55,7 +57,7 @@ def follow_up_questions(message: str, extraction: SymptomExtraction | None) -> l
             "Há dor no peito, falta de ar, desmaio, sangue nas fezes ou outro sinal de gravidade?"
         )
 
-    if not (_ACCIDENT.search(report) or _ACCIDENT_DENIED.search(report)):
+    if not _ACCIDENT.search(report) and not _ACCIDENT_DENIED.search(report):
         questions.append("Houve queda, acidente ou ferimento?")
 
     return questions
