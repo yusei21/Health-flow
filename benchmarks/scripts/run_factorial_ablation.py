@@ -12,6 +12,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid5
 
 from app.agents.care_routing_agent import CareRoutingAgent
@@ -111,12 +112,12 @@ async def direct_pipeline(
 
 
 async def run_case(
-    case: dict,
+    case: dict[str, Any],
     harness_on: bool,
     ml_on: bool,
     context_on: bool,
     classifier: RoutingClassifier | None,
-) -> dict:
+) -> dict[str, Any]:
     extraction = SymptomExtraction.model_validate(case["extraction"])
     message = str(case["report"])
     user_id = uuid5(NAMESPACE, str(case["case_id"]))
@@ -171,7 +172,9 @@ async def run_case(
     }
 
 
-async def run_all(cases: list[dict], classifier: RoutingClassifier | None) -> list[dict]:
+async def run_all(
+    cases: list[dict[str, Any]], classifier: RoutingClassifier | None
+) -> list[dict[str, Any]]:
     results = []
     for case in cases:
         for h in (False, True):
@@ -181,7 +184,7 @@ async def run_all(cases: list[dict], classifier: RoutingClassifier | None) -> li
     return results
 
 
-def load_cases(path: Path) -> list[dict]:
+def load_cases(path: Path) -> list[dict[str, Any]]:
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     cases = []
