@@ -372,3 +372,31 @@ Harness → InsuranceAgent (produto/plano específico) → cobertura + rede veri
 ```
 
 Conhecer a operadora não basta: a cobertura depende do produto contratado.
+
+
+## Planner Jev opcional
+
+O `AutonomousHealthFlowHarness` suporta dois planners:
+
+- `DeterministicPlanner`: padrão local e fallback obrigatório;
+- `JevPlanner`: integração experimental com `POST /v1/systemone` do Jev.
+
+O Jev recebe somente estado abstrato do workflow. Antes da chamada remota, o backend remove qualquer necessidade de enviar mensagem clínica, identificador do paciente, localização ou prontuário. O payload contém apenas sinais como etapas concluídas, existência de red flag e ações atualmente permitidas.
+
+O fluxo é:
+
+```text
+HarnessState
+  ↓
+HarnessPolicy.allowed_actions()
+  ↓
+JevPlanner
+  ↓
+proposta + probabilidade
+  ↓
+HarnessPolicy.validate()
+  ├─ aceita → ActionExecutor
+  └─ rejeita / baixa probabilidade / erro → DeterministicPlanner
+```
+
+O safety pre-check e qualquer caminho com red flag não dependem do Jev. Assim, indisponibilidade ou latência do serviço remoto não bloqueia o caminho crítico. A autoridade permanece `Safety Engine > Policy > Planner > Agents/Models/Tools`.
