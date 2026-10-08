@@ -174,3 +174,29 @@ O arquivo de análise exige oito variantes por caso, um único hash de corpus e 
 ### Correção de invocação
 
 O executor deve ser iniciado a partir da raiz do repositório com `uv run python -m benchmarks.scripts.run_factorial_ablation`, **não** `uv run python benchmarks/scripts/run_factorial_ablation.py`, pois este último modo não garante a resolução do pacote `app`. O caminho `/caminho/para/casos_autorizados.jsonl` é ilustrativo e deve ser substituído por um arquivo existente. Só execute o analisador depois que o JSONL de saídas tiver sido gerado.
+
+
+## Piloto sintético reproduzível: 60 casos, oito combinações
+
+Foi adicionado `benchmarks/fixtures/ablacao_piloto.jsonl` com 60 casos **inteiramente fictícios**, balanceados em 20 casos por classe. Há 30 perfis adultos (31 anos) e 30 idosos (76 anos), com dados contextuais simulados nos perfis idosos. As duas versões de cada cenário compartilham os sintomas e diferem no prontuário. A entrada de sintomas é **pré-extraída/congelada**, sem chamada real ao LLM.
+
+**Restrição crítica:** o campo `reference_provenance` vale `illustrative_template_not_independent_clinical_label`: os rótulos foram atribuídos por projeto da fixture, **não** por revisão clínica independente. Portanto F1/recall/subtriagem provenientes desta fixture são **diagnósticos de engenharia apenas**, sem validade clínica nem evidência de generalização. Em particular, sintomas escritos em linguagem natural e notas de prontuário não representam EHR ou SUS reais. Não publicar este piloto como validação externa.
+
+Para rodar a partir da raiz do projeto:
+
+```bash
+git pull --ff-only origin main
+make check
+uv run python -m benchmarks.scripts.validate_factorial_pilot benchmarks/fixtures/ablacao_piloto.jsonl
+uv run python -m benchmarks.scripts.run_factorial_ablation \\
+  --cases benchmarks/fixtures/ablacao_piloto.jsonl \\
+  --model-dir models/synthetic-v1 \\
+  --output benchmarks/results/ablacao_piloto_60.jsonl
+uv run python benchmarks/analyze_factorial_ablation.py \\
+  benchmarks/results/ablacao_piloto_60.jsonl \\
+  --output benchmarks/results/resumo_piloto_60.json
+```
+
+Esperam-se 60 pares de casos e 480 linhas de predição (60 casos multiplicados por oito combinações). O analisador devolve medidas **descritivas** que apenas ajudam a detectar diferenças de implementação. Uma avaliação do efeito do contexto exige rótulos revisados independentemente, análise pareada de mudanças por perfil, controle de confundimento e discussão da procedência do conjunto. Para medir a contribuição do Harness, executar também testes de injeção de falhas, limites, passos e falhas de provedores, já que acurácia de roteamento isolada não testa esses benefícios.
+
+O modelo sintético empregado foi treinado em dados também sintéticos; situações semelhantes às de treino não comprovam generalização. A segurança não está validada clinicamente. O conteúdo de `benchmarks/results/` deve ser revisado antes de qualquer publicação.
