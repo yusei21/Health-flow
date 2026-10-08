@@ -301,6 +301,30 @@ AutonomousHealthFlowHarness
 
 O planner escolhe o próximo passo permitido de acordo com o estado atual. A policy impede ações inválidas, e o Safety Engine mantém prioridade sobre qualquer decisão de ML ou LLM.
 
+## Jev Planner experimental
+
+O Harness usa o `DeterministicPlanner` por padrão. Opcionalmente, o backend pode usar o Jev como planner remoto para escolher a próxima ação entre as ações que a `HarnessPolicy` permite naquele estado.
+
+A hierarquia continua:
+
+```text
+Safety Engine > Policy > Planner > Agents / Models / Tools
+```
+
+O Jev não recebe relato clínico bruto, prontuário, identificador do paciente nem coordenadas. Ele recebe somente um estado abstrato do workflow, como ações já concluídas, presença de red flag e ações permitidas. Se houver timeout, erro HTTP, resposta inválida, ação proibida ou probabilidade abaixo do limite, o sistema volta automaticamente para o `DeterministicPlanner`.
+
+Para habilitar:
+
+```bash
+HEALTHFLOW_HARNESS_PLANNER=jev
+HEALTHFLOW_JEV_ENABLED=true
+HEALTHFLOW_JEV_API_KEY=sua-chave
+HEALTHFLOW_JEV_MODEL=jev-latest
+HEALTHFLOW_JEV_MIN_PROBABILITY=0.70
+```
+
+Nunca coloque a chave do Jev no frontend ou no Git. Sem essa configuração, o projeto continua funcionando normalmente com o planner determinístico.
+
 ## Machine Learning e datasets
 
 O projeto possui suporte para:
