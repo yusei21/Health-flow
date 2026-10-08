@@ -154,12 +154,18 @@ benchmarks/results/<timestamp>_<experimento>_<modelo>_<run_id>.json
 - O artefato `joblib` só é carregado se o SHA-256 bater com `metadata.json` (joblib executa código ao
   desserializar).
 
+## Separação entre demonstração e avaliação científica
+
+`make train` / `make train-synthetic` permanecem para levantar a API em ambiente de desenvolvimento com um artefato sintético. O alvo `make benchmark-ml` agora exige pelo menos um dataset externo processado (MIMIC ou Triagegeist) e **não** treina o sintético implicitamente. Essa alteração não torna os rótulos desses datasets equivalentes ao encaminhamento no SUS; as limitações de mapeamento ESI e domain shift permanecem.
+
+O comparador de LLM está documentado no README e exige `--cases` e `--provenance`. Dados e rótulos autênticos não foram automaticamente obtidos; sem arquivos autorizados, não existe benchmark real de extração.
+
 ## Resultados — Experimento A (`synthetic-v1`)
 
 **Dados sintéticos: os números medem a recuperação do processo gerador, não a realidade clínica.**
 Os valores exatos estão nos JSON em `benchmarks/results/`.
 
-Execução de referência: `make benchmark-ml`, commit `f0ac6eb` (árvore limpa), registros
+Execução histórica de referência: `make train-synthetic` (anteriormente também incluída em `make benchmark-ml`), commit `f0ac6eb` (árvore limpa), registros
 `benchmarks/results/2026-10-07T224326_synthetic_baseline_*_eb0307e7.json`.
 
 Validação cruzada (treino, n=3200), **usada para a seleção**:
