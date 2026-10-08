@@ -25,11 +25,16 @@ test:
 test-ollama:
 	HEALTHFLOW_RUN_OLLAMA_TESTS=1 uv run pytest -m ollama
 
-# Same labeled cases across models; each run creates an immutable JSON file.
-# Example: make benchmark-llm LLM_MODEL=llama3.2:3b
+# Article benchmark: requires an authorized, source-documented labeled dataset.
+# Example: make benchmark-llm LLM_CASES=/secure/cases.jsonl LLM_PROVENANCE=/secure/source.json LLM_MODEL=qwen3:4b
 LLM_MODEL ?= qwen3:4b
+LLM_CASES ?=
+LLM_PROVENANCE ?=
 benchmark-llm:
-	uv run python -m benchmarks.scripts.benchmark_llm --model $(LLM_MODEL)
+	@test -n "$(LLM_CASES)" && test -n "$(LLM_PROVENANCE)" || \
+		(echo "Provide LLM_CASES and LLM_PROVENANCE; bundled fictional cases are not article data." && exit 2)
+	uv run python -m benchmarks.scripts.benchmark_llm --model "$(LLM_MODEL)" \
+		--cases "$(LLM_CASES)" --provenance "$(LLM_PROVENANCE)"
 
 lint:
 	uv run ruff check .
