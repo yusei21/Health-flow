@@ -1,14 +1,14 @@
 """Policy/guard layer: every planned action is validated here before it runs.
 
-Safety has authority over the planner. These checks hold for ANY planner, so a future
-LLM planner cannot reorder or skip the safety-critical parts of the workflow.
+Safety has authority over the planner. These checks hold for ANY planner, so a remote
+planner cannot reorder or skip the safety-critical parts of the workflow.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NoReturn
 
-from app.core.exceptions import HarnessLimitError, HarnessPolicyError
+from app.core.exceptions import HarnessError, HarnessLimitError, HarnessPolicyError
 from app.harness.actions import (
     ACTION_KIND,
     ALLOWED_ACTIONS,
@@ -24,11 +24,9 @@ A = HarnessAction
 
 @dataclass(frozen=True)
 class HarnessLimits:
-    # The longest legitimate run has 8 steps; the margin only absorbs future actions.
     max_steps: int = 10
     max_llm_calls: int = 1
     max_tool_calls: int = 3
-    # Above the LLM client's own timeout x retries, so that one normally fires first.
     timeout_seconds: float = 90.0
 
 
@@ -42,6 +40,24 @@ def _extract_symptoms(state: HarnessState) -> str | None:
     precheck = state.safety_precheck
     if precheck is not None and precheck.has_red_flag:
         return "precheck red flag: routing must not wait for the LLM"
+    return None
+
+
+def _load_patient_context(state: HarnessState) -> str | None:
+    if reason := _precheck_required(state):
+        return reason
+    if not state.done(A.EXTRACT_SYMPTOMS) or state.extracted_symptoms is None:
+        return "patient context requires a successful symptom extraction"
+    return None
+
+
+def _run_safety_assessment(state: HarnessState) -> str | None:
+    if reason := _precheck_required(state):
+        return reason
+    if state.extracted_symptoms is None:
+        return "full safety assessment requires extracted symptoms"
+    if state.patient_context is None:
+        return "full safety assessment requires patient context"
     return None
 
 
@@ -80,8 +96,8 @@ def _finalize(state: HarnessState) -> str | None:
 _PRECONDITIONS: dict[HarnessAction, Callable[[HarnessState], str | None]] = {
     A.SAFETY_PRECHECK: lambda _: None,
     A.EXTRACT_SYMPTOMS: _extract_symptoms,
-    A.LOAD_PATIENT_CONTEXT: _precheck_required,
-    A.RUN_SAFETY_ASSESSMENT: _precheck_required,
+    A.LOAD_PATIENT_CONTEXT: _load_patient_context,
+    A.RUN_SAFETY_ASSESSMENT: _run_safety_assessment,
     A.RUN_ML: _run_ml,
     A.APPLY_ROUTING: _apply_routing,
     A.SEARCH_FACILITIES: _search_facilities,
@@ -104,6 +120,17 @@ class HarnessPolicy:
         self._check_budgets(action, state)
         if reason := _PRECONDITIONS[action](state):
             self._reject(f"{action} refused: {reason}")
+
+    def allowed_actions(self, state: HarnessState) -> tuple[HarnessAction, ...]:
+        """Return actions the policy would accept now, without mutating state."""
+        allowed: list[HarnessAction] = []
+        for action in HarnessAction:
+            try:
+                self.validate(PlannedAction(action, "POLICY_PROBE"), state)
+            except HarnessError:
+                continue
+            allowed.append(action)
+        return tuple(allowed)
 
     def _check_budgets(self, action: HarnessAction, state: HarnessState) -> None:
         limits = self.limits
