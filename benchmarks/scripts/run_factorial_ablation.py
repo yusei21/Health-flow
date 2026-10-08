@@ -14,13 +14,14 @@ from pathlib import Path
 from uuid import UUID, uuid5
 
 from app.agents.care_routing_agent import CareRoutingAgent
+from app.agents.intent_agent import IntentAgent
+from app.agents.patient_context_agent import PatientContextAgent
 from app.agents.navigation_agent import NavigationAgent
 from app.context.builder import PatientContextBuilder
 from app.harness.autonomous_harness import AutonomousHealthFlowHarness
 from app.harness.state import combine_assessments
 from app.ml.classifier import RoutingClassifier
 from app.ml.inference import RoutingInferenceService
-from app.repositories.patients import InMemoryPatientRepository
 from app.safety.engine import SafetyEngine
 from app.schemas.care import CareLevel
 from app.schemas.patient import PatientContext, PatientRecord
@@ -32,7 +33,7 @@ LEVELS = tuple(CareLevel)
 NAMESPACE = UUID("538a2306-dcbc-482f-b2de-5fcd7c9e1350")
 
 
-class FrozenIntent:
+class FrozenIntent(IntentAgent):
     """Return independently prepared structured extraction, not a live LLM result."""
 
     def __init__(self, extraction: SymptomExtraction) -> None:
@@ -42,7 +43,7 @@ class FrozenIntent:
         return self.extraction
 
 
-class FrozenContext:
+class FrozenContext(PatientContextAgent):
     def __init__(self, record: PatientRecord | None, enabled: bool) -> None:
         self.record = record if enabled else None
         self.builder = PatientContextBuilder()
