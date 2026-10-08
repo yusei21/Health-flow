@@ -52,3 +52,35 @@ continua usando o serviço OpenStreetMap.
 
 **Importante:** cadastro CNES não prova disponibilidade operacional.
 Não usar dados cadastrados como garantia de atendimento imediato.
+
+## Uso pelo terminal
+
+Crie um arquivo `cnes-columns.json` com os onze pares campo lógico/cabeçalho
+da **exportação que você conferiu** (veja o dicionário no exemplo anterior).
+Após extrair o CSV oficial e verificar o separador:
+
+```bash
+uv run python -m app.tools.import_cnes \
+  --csv /caminho/para/cnes.csv \
+  --mapping cnes-columns.json \
+  --reference-date 2026-10-07 \
+  --source-url https://URL-OFICIAL-DO-RECURSO-BAIXADO \
+  --database data/cnes.sqlite
+```
+
+Os valores de data e URL acima são **exemplos a substituir pelo recurso real**.
+No `.env` do backend, após importação bem-sucedida:
+
+```env
+HEALTHFLOW_CNES_DATABASE=data/cnes.sqlite
+```
+
+Reinicie o backend. Quando a configuração não é fornecida, a fonte continua
+sendo o OSM. Se for fornecida mas o banco estiver ausente/corrompido,
+a busca falha explicitamente em vez de inventar uma unidade.
+
+**Revisão de segurança:** o importador mapeia 73 para a categoria técnica
+`UPA` e 05/07/20/21 para `EMERGENCY_ROOM` porque essa é a enumeração
+atual do protótipo. Os códigos oficiais 73 e 05/07 **não comprovam**
+funcionamento de UPA 24h nem atendimento emergencial no hospital.
+Essas categorias precisam de refinamento antes de indicar serviços a pacientes.
