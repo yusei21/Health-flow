@@ -275,7 +275,6 @@ def _evaluate_candidate(
     )
 
 
-
 CV_MIN_SUPPORT = 2
 
 
