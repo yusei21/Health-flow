@@ -66,7 +66,7 @@ def routing_ready_state() -> HarnessState:
     )
     state.routing_decision = RoutingDecision(
         care_level=CareLevel.PRIMARY_CARE,
-        service_type=ServiceType.PRIMARY_CARE,
+        service_type=ServiceType.UBS,
         reason_codes=["TEST"],
         safety_override=False,
         ml_prediction=None,
