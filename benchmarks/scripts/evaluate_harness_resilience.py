@@ -15,7 +15,12 @@ from uuid import UUID
 
 from app.agents.care_routing_agent import CareRoutingAgent
 from app.agents.navigation_agent import NavigationAgent
-from app.core.exceptions import FacilityProviderError, LLMUnavailableError, MLInferenceError
+from app.core.exceptions import (
+    FacilityProviderError,
+    HarnessError,
+    LLMUnavailableError,
+    MLInferenceError,
+)
 from app.harness.actions import HarnessAction, PlannedAction
 from app.harness.autonomous_harness import AutonomousHealthFlowHarness
 from app.harness.state import HarnessState
@@ -62,7 +67,9 @@ class InvalidPlanner:
         return PlannedAction(HarnessAction.APPLY_ROUTING, "INJECTED_SKIP_PRECHECK")
 
 
-def components(\n    failure: str,\n) -> tuple[FrozenIntent, RoutingInferenceService, NavigationAgent, FrozenContext]:
+def components(
+    failure: str,
+) -> tuple[FrozenIntent, RoutingInferenceService, NavigationAgent, FrozenContext]:
     intent = FailingIntent(EXTRACTION) if failure == "llm" else FrozenIntent(EXTRACTION)
     inference = FailingInference() if failure == "ml" else RuleBaseline()
     nav = FailingNavigation() if failure == "facilities" else NavigationAgent(
@@ -85,7 +92,7 @@ async def harness_trial(failure: str) -> dict[str, object]:
     )
     try:
         state = await runner.run("injected", USER, MESSAGE, -23.55, -46.64)
-    except Exception as exc:
+    except (FacilityProviderError, HarnessError, LLMUnavailableError, MLInferenceError) as exc:
         return {"status": "raised", "error_type": type(exc).__name__, "decision": None}
     return {
         "status": "completed",
@@ -110,7 +117,7 @@ async def direct_trial(failure: str) -> dict[str, object]:
         prediction = inference.predict(extraction, context) if not full.has_red_flag else None
         routing = CareRoutingAgent(low_confidence_threshold=0.55).decide(full, prediction)
         await nav.find_facilities(routing.service_type, -23.55, -46.64)
-    except Exception as exc:
+    except (FacilityProviderError, HarnessError, LLMUnavailableError, MLInferenceError) as exc:
         return {"status": "raised", "error_type": type(exc).__name__, "decision": None}
     return {"status": "completed", "decision": routing.care_level.value}
 
@@ -142,7 +149,9 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     report = asyncio.run(evaluate())
-    args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     sys.stdout.write("Failure injection completed: 5 scenarios (including baseline).\n")
 
 
