@@ -11,8 +11,8 @@ from app.harness.state import HarnessState
 from app.safety.schemas import SafetyAssessment
 from app.schemas.care import CareLevel, ServiceType
 from app.schemas.patient import PatientContext
-from app.schemas.symptoms import SymptomExtraction
 from app.schemas.routing import RoutingDecision
+from app.schemas.symptoms import SymptomExtraction
 
 pytestmark = pytest.mark.anyio
 
