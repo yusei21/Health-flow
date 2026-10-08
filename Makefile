@@ -1,7 +1,7 @@
 .PHONY: install dev dev-backend dev-frontend dev-all test test-ollama benchmark-llm lint format typecheck check up down \
 	dataset train evaluate dataset-synthetic train-synthetic evaluate-synthetic \
 	dataset-mimic train-mimic evaluate-mimic dataset-triagegeist train-triagegeist \
-	evaluate-triagegeist benchmark-ml benchmark-summary
+	evaluate-triagegeist benchmark-ml benchmark-summary benchmark-audit
 
 install:
 	uv sync
@@ -109,6 +109,15 @@ benchmark-ml:
 
 benchmark-summary:
 	uv run python benchmarks/scripts/summarize_results.py $(BENCHMARK_DIR)
+
+# Supply one four-model run, not the entire directory with mixed experiments.
+# Example: make benchmark-audit AUDIT_RUN=781fd757
+AUDIT_RUN ?=
+benchmark-audit:
+	@test -n "$(AUDIT_RUN)" || (echo "Provide AUDIT_RUN=<run_id_prefix>" && exit 2)
+	uv run python -m benchmarks.scripts.audit_results \
+		$(BENCHMARK_DIR)/*_$(AUDIT_RUN).json \
+		--output $(BENCHMARK_DIR)/audit_$(AUDIT_RUN).json
 
 # Backwards-compatible aliases (synthetic baseline served by the API).
 dataset: dataset-synthetic
