@@ -1,4 +1,5 @@
 """Regression checks for offline ablation wiring, not clinical evaluation."""
+
 from __future__ import annotations
 
 import asyncio
@@ -54,8 +55,6 @@ def test_corpus_rejects_duplicate_cases(tmp_path: Path) -> None:
     path = tmp_path / "cases.jsonl"
     case = sample()
     case.pop("_hash")
-    path.write_text(
-        json.dumps(case) + "\n" + json.dumps(case) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(case) + "\n" + json.dumps(case) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate case_id"):
         load_cases(path)

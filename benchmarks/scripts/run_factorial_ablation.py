@@ -3,6 +3,7 @@
 Input cases must have independently assigned labels and pre-extracted symptoms.
 This tool does not access EHRs, call the LLM, or establish clinical validity.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -110,7 +111,10 @@ async def direct_pipeline(
 
 
 async def run_case(
-    case: dict, harness_on: bool, ml_on: bool, context_on: bool,
+    case: dict,
+    harness_on: bool,
+    ml_on: bool,
+    context_on: bool,
     classifier: RoutingClassifier | None,
 ) -> dict:
     extraction = SymptomExtraction.model_validate(case["extraction"])
@@ -119,7 +123,8 @@ async def run_case(
     record_data = case.get("patient_record")
     record = (
         PatientRecord.model_validate({**record_data, "user_id": user_id})
-        if record_data is not None else None
+        if record_data is not None
+        else None
     )
     context = FrozenContext(record, context_on)
     inference = RoutingInferenceService(classifier) if ml_on else RuleBaseline()
