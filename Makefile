@@ -1,4 +1,4 @@
-.PHONY: install dev dev-backend dev-frontend dev-all test test-ollama lint format typecheck check up down \
+.PHONY: install dev dev-backend dev-frontend dev-all test test-ollama benchmark-llm lint format typecheck check up down \
 	dataset train evaluate dataset-synthetic train-synthetic evaluate-synthetic \
 	dataset-mimic train-mimic evaluate-mimic dataset-triagegeist train-triagegeist \
 	evaluate-triagegeist benchmark-ml benchmark-summary
@@ -24,6 +24,12 @@ test:
 
 test-ollama:
 	HEALTHFLOW_RUN_OLLAMA_TESTS=1 uv run pytest -m ollama
+
+# Same labeled cases across models; each run creates an immutable JSON file.
+# Example: make benchmark-llm LLM_MODEL=llama3.2:3b
+LLM_MODEL ?= qwen3:4b
+benchmark-llm:
+	uv run python -m benchmarks.scripts.benchmark_llm --model $(LLM_MODEL)
 
 lint:
 	uv run ruff check .
