@@ -13,9 +13,9 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.core.exceptions import JevProviderError
+from app.core.exceptions import HarnessError, JevProviderError
 from app.harness.actions import HarnessAction, PlannedAction
 from app.harness.planner import DeterministicPlanner, Planner
 from app.harness.policy import HarnessPolicy
@@ -175,7 +175,9 @@ class JevHttpProvider:
         except JevProviderError:
             raise
         except (httpx.HTTPError, ValidationError, ValueError) as exc:
-            raise JevProviderError(f"invalid or unavailable Jev response: {type(exc).__name__}") from exc
+            raise JevProviderError(
+                f"invalid or unavailable Jev response: {type(exc).__name__}"
+            ) from exc
 
         answer = parsed.answers.get("next_action")
         if answer is None:
@@ -261,8 +263,8 @@ class JevPlanner:
         # Validate here before returning so a bad remote proposal becomes a safe fallback.
         try:
             self._policy.validate(planned, state)
-        except Exception as exc:
-            # validate() only raises harness guard exceptions; never log exception text.
+        except HarnessError as exc:
+            # Never log exception text; it may contain implementation details.
             logger.warning(
                 "jev_planner_fallback",
                 extra={
