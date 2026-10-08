@@ -78,7 +78,7 @@ class AutonomousHealthFlowHarness:
 
     async def _loop(self, state: HarnessState) -> None:
         while not state.finished:
-            planned = self._planner.next_action(state)
+            planned = await self._planner.next_action(state)
             # Audit trail: ids, action names and reason codes only — never clinical text.
             logger.info(
                 "planner_decision",
