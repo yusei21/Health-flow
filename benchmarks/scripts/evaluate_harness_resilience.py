@@ -18,8 +18,10 @@ from app.core.exceptions import FacilityProviderError, LLMUnavailableError, MLIn
 from app.harness.actions import HarnessAction, PlannedAction
 from app.harness.autonomous_harness import AutonomousHealthFlowHarness
 from app.ml.inference import RoutingInferenceService
+from app.schemas.routing import MLPrediction
+from app.harness.state import HarnessState
 from app.safety.engine import SafetyEngine
-from app.schemas.care import CareLevel, ServiceType
+from app.schemas.care import ServiceType
 from app.schemas.facility import FacilityMatch
 from app.schemas.patient import PatientContext
 from app.schemas.symptoms import SymptomExtraction
@@ -35,7 +37,7 @@ class FailingInference(RoutingInferenceService):
     def __init__(self) -> None:
         super().__init__(None)
 
-    def predict(self, extraction: SymptomExtraction, context: PatientContext):
+    def predict(self, extraction: SymptomExtraction, context: PatientContext) -> MLPrediction:
         raise MLInferenceError("injected ml outage")
 
 
@@ -55,11 +57,11 @@ class FailingIntent(FrozenIntent):
 
 
 class InvalidPlanner:
-    async def next_action(self, state):
+    async def next_action(self, state: HarnessState) -> PlannedAction:
         return PlannedAction(HarnessAction.APPLY_ROUTING, "INJECTED_SKIP_PRECHECK")
 
 
-def components(failure: str):
+def components(\n    failure: str,\n) -> tuple[FrozenIntent, RoutingInferenceService, NavigationAgent, FrozenContext]:
     intent = FailingIntent(EXTRACTION) if failure == "llm" else FrozenIntent(EXTRACTION)
     inference = FailingInference() if failure == "ml" else RuleBaseline()
     nav = FailingNavigation() if failure == "facilities" else NavigationAgent(
@@ -96,7 +98,7 @@ async def direct_trial(failure: str) -> dict[str, object]:
     intent, inference, nav, context_agent = components(failure)
     try:
         safety = SafetyEngine()
-        precheck = safety.assess(MESSAGE, None, None)
+        safety.assess(MESSAGE, None, None)
         # No planner or policy exists in the direct branch; 'policy' is an invalid
         # ordering attempt which the direct sequence refuses to simulate as safe.
         if failure == "policy":
