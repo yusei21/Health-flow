@@ -5,6 +5,7 @@ Input: JSONL with one record per (case_id, harness_enabled,
 ml_enabled, patient_context_enabled). No patient identifiers or PHI.
 Only TEST records belong in the supplied file.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -82,21 +83,25 @@ def scores(items: list[dict]) -> dict:
         "undertriage_rate": under / len(items),
         "confusion": {cls: [cm[cls][pred] for pred in CLASSES] for cls in CLASSES},
         "latency_ms_p50": statistics.median([r["duration_ms"] for r in items])
-        if all(isinstance(r.get("duration_ms"), (int, float)) for r in items) else None,
+        if all(isinstance(r.get("duration_ms"), (int, float)) for r in items)
+        else None,
     }
 
 
 def summarize(path: Path) -> dict:
     grouped = load_records(path)
     output = {key: scores([cases[key] for cases in grouped.values()]) for key in SETTINGS}
-    return {"status": "observed_experimental_results", "n_paired_cases": len(grouped),
-            "dataset_hash": next(iter(next(iter(grouped.values())).values()))["dataset_hash"],
-            "variants": output,
-            "limitations": [
-                "No clinical validation implied",
-                "Intervals and cluster-adjusted uncertainty not computed",
-                "Insufficient class support must be assessed before interpreting metrics",
-            ]}
+    return {
+        "status": "observed_experimental_results",
+        "n_paired_cases": len(grouped),
+        "dataset_hash": next(iter(next(iter(grouped.values())).values()))["dataset_hash"],
+        "variants": output,
+        "limitations": [
+            "No clinical validation implied",
+            "Intervals and cluster-adjusted uncertainty not computed",
+            "Insufficient class support must be assessed before interpreting metrics",
+        ],
+    }
 
 
 def main() -> None:
