@@ -276,6 +276,9 @@ def _evaluate_candidate(
 
 
 
+CV_MIN_SUPPORT = 2
+
+
 def validate_external_evaluation_split(data: PreparedData, random_state: int) -> None:
     """Refuse three-class evaluation when a held-out class or CV fold is absent.
 
@@ -285,15 +288,22 @@ def validate_external_evaluation_split(data: PreparedData, random_state: int) ->
     train_idx, test_idx = data.split.train_index, data.split.test_index
     train_labels, test_labels = data.labels[train_idx], data.labels[test_idx]
     groups_train = data.groups[train_idx] if data.groups is not None else None
-    folds = list(cv_folds(train_labels, groups_train, random_state))
     partitions = [("train", train_labels), ("held-out test", test_labels)]
-    partitions.extend(
-        (f"CV fold {i} validation", train_labels[valid])
-        for i, (_, valid) in enumerate(folds, start=1)
-    )
     for name, labels in partitions:
         counts = {label: int(np.count_nonzero(labels == label)) for label in CLASS_ORDER}
-        if min(counts.values()) < 2:
+        if min(counts.values()) < CV_MIN_SUPPORT:
+            raise ValueError(
+                f"Insufficient support in {name}: {counts}. "
+                "External three-class benchmarking needs more examples for each class."
+            )
+    folds = list(cv_folds(train_labels, groups_train, random_state))
+    partitions = [
+        (f"CV fold {i} validation", train_labels[valid])
+        for i, (_, valid) in enumerate(folds, start=1)
+    ]
+    for name, labels in partitions:
+        counts = {label: int(np.count_nonzero(labels == label)) for label in CLASS_ORDER}
+        if min(counts.values()) < CV_MIN_SUPPORT:
             raise ValueError(
                 f"Insufficient support in {name}: {counts}. "
                 "Each class needs at least two independent examples per evaluation "
