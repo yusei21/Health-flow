@@ -1,6 +1,6 @@
 # Health-flow
 
-Health-flow é um sistema de navegação em saúde que recebe o relato do usuário, interpreta os sintomas com IA local, combina regras de segurança com Machine Learning e indica o tipo de atendimento mais adequado. A interface também pode usar a localização do próprio usuário, com permissão do navegador, para ajudar a encontrar uma unidade compatível próxima.
+Health-flow é um sistema de navegação em saúde que recebe o relato do usuário, considera um contexto clínico inicial simplificado do paciente, interpreta os sintomas com IA local, combina regras de segurança com Machine Learning e indica o tipo de atendimento mais adequado. A interface também pode usar a localização do próprio usuário, com permissão do navegador, para ajudar a encontrar uma unidade compatível próxima.
 
 O sistema não faz diagnóstico, não prescreve medicamentos e não aciona ambulâncias. Em uma possível emergência, a orientação pode incluir contato com o SAMU pelo 192.
 
@@ -9,19 +9,19 @@ O sistema não faz diagnóstico, não prescreve medicamentos e não aciona ambul
 ```text
 Usuário descreve o que está sentindo
         ↓
-Geolocalização do navegador (com permissão)
-        ↓
-Autonomous Agent Harness
-        ↓
-Safety Engine
+Safety pre-check
         ↓
 LLM local (Qwen3 via Ollama)
         ↓
-Contexto mínimo do paciente
+Prontuário inicial simplificado
         ↓
-Machine Learning
+Context Builder
+        ↓
+Safety Engine + Machine Learning
         ↓
 Care Routing
+        ↓
+Geolocalização do navegador (com permissão)
         ↓
 Busca de unidade compatível
         ↓
@@ -29,6 +29,69 @@ Resposta para o usuário
 ```
 
 O Agent Harness escolhe dinamicamente a próxima ação dentro de um conjunto fechado de ações permitidas. As regras de segurança têm prioridade sobre o LLM e sobre o modelo de Machine Learning.
+
+## Fases do projeto
+
+O desenvolvimento será incremental. A ideia é começar simples e ampliar somente depois que a Fase 1 estiver estável.
+
+### Fase 1 — encaminhamento, contexto inicial e localização
+
+É a fase atual. O sistema considera:
+
+- relato atual do usuário;
+- um prontuário inicial simplificado;
+- idade/faixa etária;
+- fatores de risco categóricos;
+- alergias somente quando forem relevantes para o relato;
+- medicamentos anticoagulantes somente quando forem relevantes;
+- regras de segurança;
+- classificação experimental;
+- localização para procurar uma unidade compatível.
+
+O protótipo atual usa um paciente fictício em memória. Não existe integração com um prontuário nacional, hospitalar ou do SUS. O histórico longitudinal completo também não participa da decisão nesta etapa. O objetivo inicial é validar o fluxo usando apenas o contexto mínimo necessário.
+
+Fluxo conceitual:
+
+```text
+Relato atual
+   ↓
+Safety pre-check
+   ↓
+Extração estruturada
+   ↓
+Prontuário inicial simplificado
+   ↓
+Context Builder
+   ↓
+Safety + ML
+   ↓
+Encaminhamento
+   ↓
+GPS
+   ↓
+Unidade compatível
+```
+
+### Fase 2 — exames, procedimentos e cobertura
+
+Depois da Fase 1, o sistema deverá consultar fontes verificáveis para responder perguntas como:
+
+- o SUS disponibiliza determinado exame ou procedimento?
+- onde esse serviço pode ser realizado?
+- se o usuário tiver plano de saúde, o produto contratado cobre esse exame ou procedimento?
+
+Essa fase deverá trabalhar com fontes oficiais e não depender apenas da resposta do LLM.
+
+### Fase 3 — medicamentos
+
+A terceira fase será voltada à localização de medicamentos informados ou já prescritos pelo usuário:
+
+- disponibilidade no SUS;
+- pontos de dispensação;
+- disponibilidade na rede privada quando houver fonte apropriada;
+- ordenação por localização.
+
+A Fase 3 não tem como objetivo prescrever medicamentos.
 
 ## Principais componentes
 
@@ -366,6 +429,8 @@ para gerar o modelo usado pela API.
 ## Observações
 
 - O LLM recebe somente o relato necessário para interpretar os sintomas.
+- O prontuário inicial simplificado não é enviado ao LLM; o Context Builder reduz os dados antes do uso por regras e ML.
+- O histórico longitudinal completo ainda não participa da decisão.
 - O modelo de ML auxilia o encaminhamento, mas não tem autoridade sobre as regras críticas de segurança.
 - O sistema orienta sobre atendimento; não substitui avaliação profissional.
 - Em uma possível emergência, siga a orientação apresentada e utilize o SAMU 192 quando indicado.
