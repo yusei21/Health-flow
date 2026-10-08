@@ -11,6 +11,7 @@ import math
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -53,7 +54,7 @@ def wilson_interval(
     )
 
 
-def audit_record(record: dict[str, object]) -> AuditResult:
+def audit_record(record: dict[str, Any]) -> AuditResult:
     metrics = record["test_metrics"]
     if not isinstance(metrics, dict):
         raise ValueError("test_metrics must be an object")
