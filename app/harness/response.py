@@ -55,10 +55,13 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
         and extraction.duration_minutes is None
     )
     questions = (
-        ["Quando começou e qual a intensidade do sintoma?",
-         "Há dor no peito, falta de ar, desmaio ou outro sinal de gravidade?",
-         "Houve acidente, ferimento ou piora rápida?"]
-        if uncertain else []
+        [
+            "Quando começou e qual a intensidade do sintoma?",
+            "Há dor no peito, falta de ar, desmaio ou outro sinal de gravidade?",
+            "Houve acidente, ferimento ou piora rápida?",
+        ]
+        if uncertain
+        else []
     )
     is_emergency = decision.care_level is CareLevel.EMERGENCY and not uncertain
     return RoutingResponse(
@@ -70,8 +73,10 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
             "Não é possível determinar a gravidade apenas com esse relato. "
             "Se houver sinais de risco imediato, acione o SAMU 192. "
             "Caso contrário, procure avaliação profissional conforme os sintomas."
-            if uncertain else _NEXT_STEP[decision.care_level]
-        ) + ("" if facility else no_facility_note),
+            if uncertain
+            else _NEXT_STEP[decision.care_level]
+        )
+        + ("" if facility else no_facility_note),
         emergency_guidance=EMERGENCY_GUIDANCE if is_emergency else None,
         reason_codes=decision.reason_codes,
         safety_override=decision.safety_override,

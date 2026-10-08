@@ -42,9 +42,7 @@ def test_final_level_respects_safety_and_caps_unvalidated_ml_emergency(
     floor: CareLevel | None, ml_level: CareLevel
 ) -> None:
     decision = agent.decide(safety(floor), prediction(ml_level))
-    expected_ml = (
-        CareLevel.URGENT_CARE if ml_level is CareLevel.EMERGENCY else ml_level
-    )
+    expected_ml = CareLevel.URGENT_CARE if ml_level is CareLevel.EMERGENCY else ml_level
     assert decision.care_level.rank >= expected_ml.rank
     if floor is not None:
         assert decision.care_level.rank >= floor.rank

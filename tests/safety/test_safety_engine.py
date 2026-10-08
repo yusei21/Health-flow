@@ -101,6 +101,7 @@ def test_explicit_negation_does_not_trigger_fainting_red_flag() -> None:
     red_flag, _, _ = assess(text="não desmaiei, só fiquei tonto", with_extraction=False)
     assert not red_flag
 
+
 def test_normalize_text_removes_accents_case_and_extra_spaces() -> None:
     assert normalize_text("  Não   CONSIGO respirar ") == "nao consigo respirar"
 

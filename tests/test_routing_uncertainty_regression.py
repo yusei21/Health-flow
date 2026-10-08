@@ -1,4 +1,5 @@
 """Regression checks for conservative routing and text negations."""
+
 from app.agents.care_routing_agent import CareRoutingAgent
 from app.safety.engine import SafetyEngine
 from app.safety.schemas import SafetyAssessment
@@ -11,7 +12,8 @@ def test_unvalidated_ml_cannot_trigger_emergency_alone() -> None:
         has_red_flag=False, matched_rules=[], suggested_minimum_care_level=None
     )
     prediction = MLPrediction(
-        predicted_class=CareLevel.EMERGENCY, confidence=0.95,
+        predicted_class=CareLevel.EMERGENCY,
+        confidence=0.95,
         probabilities={
             CareLevel.PRIMARY_CARE: 0.01,
             CareLevel.URGENT_CARE: 0.04,
@@ -25,7 +27,8 @@ def test_unvalidated_ml_cannot_trigger_emergency_alone() -> None:
 
 def test_explicit_emergency_safety_rule_preserved() -> None:
     safety = SafetyAssessment(
-        has_red_flag=True, matched_rules=["RED_FLAG_002"],
+        has_red_flag=True,
+        matched_rules=["RED_FLAG_002"],
         suggested_minimum_care_level=CareLevel.EMERGENCY,
     )
     result = CareRoutingAgent(0.55).decide(safety, None)

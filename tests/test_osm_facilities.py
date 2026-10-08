@@ -1,4 +1,5 @@
 """Basic categorization checks for live geographic provider (offline)."""
+
 from app.schemas.care import ServiceType
 from app.tools.osm_facilities import _compatible
 

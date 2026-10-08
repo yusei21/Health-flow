@@ -1,4 +1,5 @@
 """Live location lookup using real OpenStreetMap data (not official CNES)."""
+
 import logging
 
 import httpx
@@ -9,6 +10,7 @@ from app.schemas.facility import Facility, FacilityMatch
 from app.tools.geolocation import haversine_km
 
 logger = logging.getLogger(__name__)
+
 
 class OpenStreetMapFacilityProvider:
     def __init__(self, endpoint: str = "https://overpass-api.de/api/interpreter") -> None:
@@ -22,7 +24,7 @@ class OpenStreetMapFacilityProvider:
             "[out:json][timeout:15];("
             f'nwr(around:{radius},{latitude},{longitude})["amenity"~"hospital|clinic"];'
             f'nwr(around:{radius},{latitude},{longitude})["healthcare"~"hospital|clinic|centre"];'
-            f'nwr(around:{radius},{latitude},{longitude})'
+            f"nwr(around:{radius},{latitude},{longitude})"
             '["name"~"UPA|UBS|Pronto Atendimento|Pronto Socorro|Unidade B[aá]sica",i];'
             ");out center;"
         )
@@ -61,17 +63,28 @@ class OpenStreetMapFacilityProvider:
             if distance > radius_km or key in seen:
                 continue
             seen.add(key)
-            address = ", ".join(str(tags[k]) for k in (
-                "addr:street", "addr:housenumber", "addr:city"
-            ) if tags.get(k)) or "Endereço não cadastrado no OpenStreetMap"
-            matches.append(FacilityMatch(
-                facility=Facility(
-                    id=f"osm-{key[0]}-{key[1]}", name=name,
-                    service_type=service_type, address=address,
-                    latitude=lat, longitude=lon, is_simulated=False,
-                ),
-                distance_km=round(distance, 2),
-            ))
+            address = (
+                ", ".join(
+                    str(tags[k])
+                    for k in ("addr:street", "addr:housenumber", "addr:city")
+                    if tags.get(k)
+                )
+                or "Endereço não cadastrado no OpenStreetMap"
+            )
+            matches.append(
+                FacilityMatch(
+                    facility=Facility(
+                        id=f"osm-{key[0]}-{key[1]}",
+                        name=name,
+                        service_type=service_type,
+                        address=address,
+                        latitude=lat,
+                        longitude=lon,
+                        is_simulated=False,
+                    ),
+                    distance_km=round(distance, 2),
+                )
+            )
         return sorted(matches, key=lambda item: item.distance_km)
 
 
@@ -79,12 +92,18 @@ def _compatible(name: str, tags: dict[str, str], service: ServiceType) -> bool:
     value = name.casefold()
     if service is ServiceType.UPA:
         return (
-            "upa" in value.split()
-            or "pronto atendimento" in value
-            or "pronto-atendimento" in value
+            "upa" in value.split() or "pronto atendimento" in value or "pronto-atendimento" in value
         )
     if service is ServiceType.UBS:
-        return ("ubs" in value.split() or "unidade básica" in value
-                or "unidade basica" in value or "posto de saúde" in value)
-    return (tags.get("amenity") == "hospital" or tags.get("healthcare") == "hospital"
-            or "pronto socorro" in value or "pronto-socorro" in value)
+        return (
+            "ubs" in value.split()
+            or "unidade básica" in value
+            or "unidade basica" in value
+            or "posto de saúde" in value
+        )
+    return (
+        tags.get("amenity") == "hospital"
+        or tags.get("healthcare") == "hospital"
+        or "pronto socorro" in value
+        or "pronto-socorro" in value
+    )

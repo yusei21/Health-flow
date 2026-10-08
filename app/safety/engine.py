@@ -55,8 +55,7 @@ class SafetyEngine:
     @staticmethod
     def _matches_text(rule: SafetyRule, normalized_text: str) -> bool:
         return any(
-            pattern in normalized_text
-            and not _negated_pattern(normalized_text, pattern)
+            pattern in normalized_text and not _negated_pattern(normalized_text, pattern)
             for pattern in rule.text_patterns
         )
 
@@ -84,11 +83,21 @@ def _negated_pattern(text: str, pattern: str) -> bool:
     """
     start = text.find(pattern)
     while start >= 0:
-        prefix = text[max(0, start - 35):start].strip()
-        if not any(prefix.endswith(phrase) for phrase in (
-            "nao", "nunca", "nem", "sem", "nao tive", "nao estou",
-            "nao ha", "nego", "sem sinais de",
-        )):
+        prefix = text[max(0, start - 35) : start].strip()
+        if not any(
+            prefix.endswith(phrase)
+            for phrase in (
+                "nao",
+                "nunca",
+                "nem",
+                "sem",
+                "nao tive",
+                "nao estou",
+                "nao ha",
+                "nego",
+                "sem sinais de",
+            )
+        ):
             return False
         start = text.find(pattern, start + len(pattern))
     return True
