@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.intent_agent import IntentAgent
 from app.core.config import Settings
+from app.core.exceptions import LLMError
 from app.llm.ollama_provider import OllamaLLMProvider
 from app.ml.training.benchmark import git_commit
 from app.schemas.symptoms import Severity, Symptom
@@ -56,7 +57,7 @@ async def evaluate(cases: list[LabeledCase], settings: Settings) -> dict[str, ob
         t0 = time.perf_counter()
         try:
             result = await agent.extract(case.report)
-        except Exception as exc:
+        except LLMError as exc:
             # No raw text, prompts, or exception messages in the results file.
             name = type(exc).__name__
             errors[name] = errors.get(name, 0) + 1
