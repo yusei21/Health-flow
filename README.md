@@ -45,6 +45,8 @@ Os experimentos externos com MIMIC-IV-ED e Triagegeist ainda não têm resultado
 Os testes automatizados e a integração local com Ollama não substituem esses
 experimentos. Tabelas e condições de avaliação: [docs/machine-learning.md](docs/machine-learning.md).
 
+Protocolo de auditoria, critérios mínimos de suporte por classe e limites de inferência: [docs/benchmark-protocol.md](docs/benchmark-protocol.md). Para conferir uma execução já existente, use `make benchmark-audit AUDIT_RUN=781fd757` (MIMIC Demo) ou `AUDIT_RUN=eb0307e7` (sintético).
+
 ## Fases do projeto
 
 O desenvolvimento será incremental. A ideia é começar simples e ampliar somente depois que a Fase 1 estiver estável.
