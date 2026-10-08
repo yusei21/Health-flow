@@ -1,4 +1,5 @@
 from app.harness.actions import HarnessAction
+from app.harness.follow_up import follow_up_questions
 from app.harness.state import HarnessState
 from app.schemas.care import CareLevel
 from app.schemas.routing import FacilityResponse, RoutingResponse
@@ -54,15 +55,7 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
         and extraction.severity.value == "unknown"
         and extraction.duration_minutes is None
     )
-    questions = (
-        [
-            "Quando começou e qual a intensidade do sintoma?",
-            "Há dor no peito, falta de ar, desmaio ou outro sinal de gravidade?",
-            "Houve acidente, ferimento ou piora rápida?",
-        ]
-        if uncertain
-        else []
-    )
+    questions = follow_up_questions(state.user_message, extraction) if uncertain else []
     is_emergency = decision.care_level is CareLevel.EMERGENCY and not uncertain
     return RoutingResponse(
         request_id=state.request_id,
