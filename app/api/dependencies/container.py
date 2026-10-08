@@ -9,11 +9,10 @@ from app.agents.navigation_agent import NavigationAgent
 from app.agents.patient_context_agent import PatientContextAgent
 from app.auth.demo_token import DemoTokenAuthenticator
 from app.context.builder import PatientContextBuilder
-from app.core.config import HarnessPlannerKind, Settings
+from app.core.config import Settings
 from app.core.exceptions import MLModelUnavailableError
 from app.harness.autonomous_harness import AutonomousHealthFlowHarness
-from app.harness.jev import JevHttpProvider, JevPlanner
-from app.harness.planner import DeterministicPlanner, Planner
+from app.harness.planner import DeterministicPlanner
 from app.harness.policy import HarnessPolicy
 from app.llm.ollama_provider import OllamaLLMProvider
 from app.ml.classifier import RoutingClassifier
@@ -58,27 +57,6 @@ def load_classifier(settings: Settings) -> RoutingClassifier | None:
     return classifier
 
 
-def _build_planner(settings: Settings, policy: HarnessPolicy) -> Planner:
-    fallback = DeterministicPlanner()
-    if settings.harness_planner is not HarnessPlannerKind.JEV or not settings.jev_enabled:
-        return fallback
-    if settings.jev_api_key is None or not settings.jev_api_key.get_secret_value():
-        logger.warning("jev_planner_disabled", extra={"reason": "missing_api_key"})
-        return fallback
-    provider = JevHttpProvider(
-        base_url=settings.jev_base_url,
-        api_key=settings.jev_api_key.get_secret_value(),
-        model=settings.jev_model,
-        timeout_seconds=settings.jev_timeout_seconds,
-    )
-    return JevPlanner(
-        provider=provider,
-        policy=policy,
-        min_probability=settings.jev_min_probability,
-        fallback=fallback,
-    )
-
-
 def build_container(settings: Settings) -> Container:
     records = [synthetic_demo_patient(settings.demo_user_id)] if settings.demo_user_id else []
     patients = InMemoryPatientRepository(records)
@@ -90,7 +68,7 @@ def build_container(settings: Settings) -> Container:
         safety_engine=SafetyEngine(),
         inference=inference,
         routing_agent=CareRoutingAgent(settings.ml_low_confidence_threshold),
-        planner=_build_planner(settings, policy),
+        planner=DeterministicPlanner(),
         policy=policy,
         navigation_agent=NavigationAgent(
             CNESFacilityProvider(settings.cnes_database)
