@@ -109,7 +109,9 @@ class JevDecisionProvider(Protocol):
     async def choose_next_action(
         self,
         *,
-        state: HarnessState,
+        state: JevPlannerState,
+        request_id: str,
+        step_count: int,
         allowed_actions: tuple[HarnessAction, ...],
     ) -> JevDecision: ...
 
@@ -133,17 +135,18 @@ class JevHttpProvider:
     async def choose_next_action(
         self,
         *,
-        state: HarnessState,
+        state: JevPlannerState,
+        request_id: str,
+        step_count: int,
         allowed_actions: tuple[HarnessAction, ...],
     ) -> JevDecision:
         if len(allowed_actions) < 2:
             raise JevProviderError("Jev choice requires at least two allowed actions")
 
-        safe_state = _build_safe_state(state, allowed_actions)
         criteria = {action.value: _ACTION_DESCRIPTIONS[action] for action in allowed_actions}
         payload = JevRequest(
             model=self._model,
-            state=safe_state,
+            state=state,
             questions={
                 "next_action": JevChoiceQuestion(
                     instructions=(
@@ -158,7 +161,7 @@ class JevHttpProvider:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
-            "Idempotency-Key": _idempotency_key(state, allowed_actions),
+            "Idempotency-Key": _idempotency_key(request_id, step_count, allowed_actions),
         }
 
         started = time.perf_counter()
@@ -223,8 +226,11 @@ class JevPlanner:
             return await self._fallback.next_action(state)
 
         try:
+            safe_state = _build_safe_state(state, allowed)
             decision = await self._provider.choose_next_action(
-                state=state,
+                state=safe_state,
+                request_id=state.request_id,
+                step_count=state.step_count,
                 allowed_actions=allowed,
             )
         except JevProviderError as exc:
@@ -312,8 +318,9 @@ def _build_safe_state(
 
 
 def _idempotency_key(
-    state: HarnessState,
+    request_id: str,
+    step_count: int,
     allowed_actions: tuple[HarnessAction, ...],
 ) -> str:
-    raw = f"{state.request_id}:{state.step_count}:{','.join(a.value for a in allowed_actions)}"
+    raw = f"{request_id}:{step_count}:{','.join(a.value for a in allowed_actions)}"
     return hashlib.sha256(raw.encode()).hexdigest()
