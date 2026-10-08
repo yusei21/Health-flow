@@ -1,7 +1,10 @@
 from uuid import UUID
 
 import pytest
+from pydantic import SecretStr
 
+from app.api.dependencies.container import build_container
+from app.core.config import HarnessPlannerKind, Settings
 from app.core.exceptions import JevProviderError
 from app.harness.actions import HarnessAction
 from app.harness.jev import JevDecision, JevPlanner, JevPlannerState
@@ -166,3 +169,14 @@ async def test_provider_boundary_receives_only_sanitized_state() -> None:
         "allowed_actions",
         "step_count",
     }
+
+
+async def test_application_keeps_deterministic_planner_when_jev_env_enabled() -> None:
+    # Legacy configuration must not enable a remote planner in the current phase.
+    settings = Settings(
+        harness_planner=HarnessPlannerKind.JEV,
+        jev_enabled=True,
+        jev_api_key=SecretStr("unused-test-key"),
+    )
+    container = build_container(settings)
+    assert isinstance(container.harness._planner, DeterministicPlanner)
