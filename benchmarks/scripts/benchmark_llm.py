@@ -6,10 +6,12 @@ Does not assess clinical routing safety. Never persist raw reports or model outp
 
 import argparse
 import asyncio
-import json
 import hashlib
+import json
+import math
 import platform
 import statistics
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,9 +49,11 @@ class LabeledCase(BaseModel):
 
 
 def load_cases(path: Path) -> list[LabeledCase]:
-    cases = [LabeledCase.model_validate_json(line) for line in path.read_text(
-        encoding="utf-8"
-    ).splitlines() if line.strip()]
+    cases = [
+        LabeledCase.model_validate_json(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     if not cases or len({case.case_id for case in cases}) != len(cases):
         raise ValueError("cases must be nonempty and case_id must be unique")
     return cases
@@ -92,12 +96,14 @@ async def evaluate(
             and case.age == result.age
         )
         exact += int(match)
-        fields_correct += sum((
-            set(case.symptoms) == set(result.symptoms),
-            case.severity == result.severity,
-            case.duration_minutes == result.duration_minutes,
-            case.age == result.age,
-        ))
+        fields_correct += sum(
+            (
+                set(case.symptoms) == set(result.symptoms),
+                case.severity == result.severity,
+                case.duration_minutes == result.duration_minutes,
+                case.age == result.age,
+            )
+        )
         fields_total += 4
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
@@ -127,7 +133,7 @@ async def evaluate(
         ),
         "latency_ms_p50": statistics.median(latencies) if latencies else None,
         "latency_ms_p95": (
-            sorted(latencies)[min(len(latencies) - 1, max(0, int(len(latencies) * 0.95 + 0.999) - 1))]
+            sorted(latencies)[math.ceil(len(latencies) * 0.95) - 1]
             if latencies else None
         ),
         "wall_time_seconds": round(time.perf_counter() - started, 3),
@@ -138,14 +144,18 @@ async def evaluate(
     }
 
 
-async def main() -> None:
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--cases", type=Path, required=True,
+        "--cases",
+        type=Path,
+        required=True,
         help="JSONL with authorized real-source reports and independently checked labels",
     )
     parser.add_argument(
-        "--provenance", type=Path, required=True,
+        "--provenance",
+        type=Path,
+        required=True,
         help="JSON describing source, version, access terms, annotation and language",
     )
     parser.add_argument("--model", help="Override HEALTHFLOW_LLM_MODEL without editing .env")
@@ -161,14 +171,17 @@ async def main() -> None:
         parser.error("bundled fictional smoke-test cases are not accepted for article benchmarks")
     cases = load_cases(args.cases)
     dataset_sha256 = hashlib.sha256(args.cases.read_bytes()).hexdigest()
-    result = await evaluate(cases, settings, provenance, dataset_sha256)
+    result = asyncio.run(evaluate(cases, settings, provenance, dataset_sha256))
     args.output_dir.mkdir(parents=True, exist_ok=True)
     output = args.output_dir / f"{result['timestamp_utc'][:10]}_{result['run_id']}.json"
     with output.open("x", encoding="utf-8") as stream:
         json.dump(result, stream, ensure_ascii=False, indent=2)
-    print(f"Benchmark saved: {output}")
-    print(f"model={result['model']} cases={result['case_count']} completed={result['completed']}")
+    sys.stdout.write(f"Benchmark saved: {output}\n")
+    sys.stdout.write(
+        f"model={result['model']} cases={result['case_count']} "
+        f"completed={result['completed']}\n"
+    )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
