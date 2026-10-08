@@ -43,7 +43,7 @@ from app.ml.classifier import MODEL_FILENAME, ModelMetadata, file_sha256, write_
 from app.ml.data.schemas import TrainingDataset
 from app.ml.experiments import EXPERIMENTS, Experiment
 from app.ml.feature_builders import FEATURE_BUILDERS, FeatureBuilder
-from app.ml.metrics import ClassificationMetrics, TrainingMetrics, compute_metrics
+from app.ml.metrics import CLASS_ORDER, ClassificationMetrics, TrainingMetrics, compute_metrics
 from app.ml.splits import DataSplit, cv_folds, split_train_test
 from app.ml.training.benchmark import (
     DEFAULT_BENCHMARK_DIR,
@@ -275,6 +275,32 @@ def _evaluate_candidate(
     )
 
 
+
+def validate_external_evaluation_split(data: PreparedData, random_state: int) -> None:
+    """Refuse three-class evaluation when a held-out class or CV fold is absent.
+
+    Group-preserving splits can be badly imbalanced even when all labels exist
+    in the full dataset. Never present undefined per-class recall as zero.
+    """
+    train_idx, test_idx = data.split.train_index, data.split.test_index
+    train_labels, test_labels = data.labels[train_idx], data.labels[test_idx]
+    groups_train = data.groups[train_idx] if data.groups is not None else None
+    folds = list(cv_folds(train_labels, groups_train, random_state))
+    partitions = [("train", train_labels), ("held-out test", test_labels)]
+    partitions.extend(
+        (f"CV fold {i} validation", train_labels[valid])
+        for i, (_, valid) in enumerate(folds, start=1)
+    )
+    for name, labels in partitions:
+        counts = {label: int(np.count_nonzero(labels == label)) for label in CLASS_ORDER}
+        if min(counts.values()) < 2:
+            raise ValueError(
+                f"Insufficient support in {name}: {counts}. "
+                "Each class needs at least two independent examples per evaluation "
+                "partition; use a larger dataset, not duplicated or invented rows."
+            )
+
+
 def run_experiment(
     experiment: Experiment,
     dataset_path: Path,
@@ -292,6 +318,8 @@ def run_experiment(
     dataset = experiment.load_dataset(dataset_path)
     builder = FEATURE_BUILDERS[experiment.feature_set]
     data = prepare_data(dataset, builder, random_state)
+    if experiment.name != "synthetic_baseline":
+        validate_external_evaluation_split(data, random_state)
     logger.info(
         "experiment=%s rows=%d patients=%s train=%d test=%d split=%s",
         experiment.name,
