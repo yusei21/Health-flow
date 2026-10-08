@@ -15,9 +15,7 @@ _DURATION = re.compile(
     r"comecou (?:hoje|ontem|anteontem)|"
     r"desde (?:a|as) \d+ (?:horas?|dias?))\b"
 )
-_ACCIDENT = re.compile(
-    r"\b(acidente|queda|cai|caiu|bati|batida|trauma|ferimento|machuquei)\b"
-)
+_ACCIDENT = re.compile(r"\b(acidente|queda|cai|caiu|bati|batida|trauma|ferimento|machuquei)\b")
 _ACCIDENT_DENIED = re.compile(
     r"\b(?:nao (?:houve|tive|sofri|aconteceu)|sem) (?:nenhum )?"
     r"(?:acidente|queda|trauma|ferimento)\b"
