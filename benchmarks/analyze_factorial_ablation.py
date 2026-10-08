@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit and summarize paired 2×2×2 Health-flow benchmark outputs.
+"""Audit and summarize paired 2x2x2 Health-flow benchmark outputs.
 
 Input: JSONL with one record per (case_id, harness_enabled,
 ml_enabled, patient_context_enabled). No patient identifiers or PHI.
@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -108,7 +109,7 @@ def main() -> None:
     if args.output:
         args.output.write_text(text + "\n", encoding="utf-8")
     else:
-        print(text)
+        sys.stdout.write(text + "\n")
 
 
 if __name__ == "__main__":
