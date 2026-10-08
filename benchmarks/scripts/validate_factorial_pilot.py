@@ -18,9 +18,7 @@ def validate_pilot(path: Path) -> dict[str, object]:
     cases = load_cases(path)
     counts = Counter(str(case["reference_level"]) for case in cases)
     if len(cases) != 60 or dict(counts) != EXPECTED:
-        raise ValueError(
-            f"Expected 60 cases and 20 per class; found {len(cases)}: {dict(counts)}"
-        )
+        raise ValueError(f"Expected 60 cases and 20 per class; found {len(cases)}: {dict(counts)}")
     if any(case.get("reference_provenance") != PROVENANCE for case in cases):
         raise ValueError("Every reference label must declare illustrative provenance")
     if any("patient_record" not in case for case in cases):
