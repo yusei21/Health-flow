@@ -170,7 +170,7 @@ def main() -> None:
     dataset_sha256 = hashlib.sha256(args.cases.read_bytes()).hexdigest()
     result = asyncio.run(evaluate(cases, settings, provenance, dataset_sha256))
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    output = args.output_dir / f"{result['timestamp_utc'][:10]}_{result['run_id']}.json"
+    output = args.output_dir / f"{datetime.now(UTC).date().isoformat()}_{uuid4().hex}.json"
     with output.open("x", encoding="utf-8") as stream:
         json.dump(result, stream, ensure_ascii=False, indent=2)
     sys.stdout.write(f"Benchmark saved: {output}\n")
