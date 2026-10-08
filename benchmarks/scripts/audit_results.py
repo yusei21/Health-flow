@@ -117,12 +117,8 @@ def audit_record(record: dict[str, Any]) -> AuditResult:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "paths", nargs="+", type=Path, help="Immutable per-model benchmark JSONs"
-    )
-    parser.add_argument(
-        "--output", type=Path, default=Path("benchmarks/results/audit.json")
-    )
+    parser.add_argument("paths", nargs="+", type=Path, help="Immutable per-model benchmark JSONs")
+    parser.add_argument("--output", type=Path, default=Path("benchmarks/results/audit.json"))
     args = parser.parse_args()
     records = [json.loads(path.read_text(encoding="utf-8")) for path in args.paths]
     results = [audit_record(record) for record in records]
