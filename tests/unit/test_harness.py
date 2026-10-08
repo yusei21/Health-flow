@@ -64,11 +64,11 @@ class SpyPlanner:
         self.state: HarnessState | None = None
         self._inner = DeterministicPlanner()
 
-    def next_action(self, state: HarnessState) -> PlannedAction:
+    async def next_action(self, state: HarnessState) -> PlannedAction:
         self.state = state
         if self.script:
             return PlannedAction(self.script.pop(0), "TEST_SCRIPT")
-        return self._inner.next_action(state)
+        return await self._inner.next_action(state)
 
 
 class FixedInference(RoutingInferenceService):
