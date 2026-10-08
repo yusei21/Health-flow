@@ -1,8 +1,8 @@
 """Planners choose the next action from `HarnessState`.
 
 A planner only PROPOSES; `HarnessPolicy` validates every proposal before execution, so
-a buggy or future LLM-backed planner cannot skip safety, call the LLM after a precheck
-red flag, run ML on a red flag, or exceed budgets.
+a buggy or remote planner cannot skip safety, call the LLM after a precheck red flag,
+run ML on a red flag, or exceed budgets.
 """
 
 from typing import Protocol
@@ -15,7 +15,7 @@ R = ReasonCode
 
 
 class Planner(Protocol):
-    def next_action(self, state: HarnessState) -> PlannedAction: ...
+    async def next_action(self, state: HarnessState) -> PlannedAction: ...
 
 
 class DeterministicPlanner:
@@ -27,7 +27,7 @@ class DeterministicPlanner:
     LLM failure without red flag: PRECHECK → EXTRACT → FINALIZE (controlled error)
     """
 
-    def next_action(self, state: HarnessState) -> PlannedAction:
+    async def next_action(self, state: HarnessState) -> PlannedAction:
         if not state.done(A.SAFETY_PRECHECK):
             return PlannedAction(A.SAFETY_PRECHECK, R.START_WITH_SAFETY_PRECHECK)
         precheck = state.safety_precheck
@@ -37,8 +37,6 @@ class DeterministicPlanner:
         if not state.done(A.EXTRACT_SYMPTOMS):
             return PlannedAction(A.EXTRACT_SYMPTOMS, R.NO_PRECHECK_RED_FLAG)
         if state.extracted_symptoms is None:
-            # Text rules already ran in the precheck without a red flag; without an
-            # extraction no structured rule can fire, so there is nothing safe to route.
             return PlannedAction(A.FINALIZE, R.LLM_FAILED_NO_RED_FLAG)
         if not state.done(A.LOAD_PATIENT_CONTEXT):
             return PlannedAction(A.LOAD_PATIENT_CONTEXT, R.SYMPTOMS_EXTRACTED)
