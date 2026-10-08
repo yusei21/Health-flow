@@ -127,3 +127,45 @@ Auditar esquemas de entrada, relógio, seeds, modelos, dados e versões antes de
 3. Criar runner pareado para oito variantes e injeção de falhas.
 4. Revisar corpus, consentimentos/licenças, anotação independente e suporte por classe.
 5. Executar, auditar e gerar tabelas/figuras; redigir o artigo apenas com métricas confirmadas.
+
+
+## Executor offline acrescentado — estágio de desenvolvimento
+
+O arquivo `benchmarks/scripts/run_factorial_ablation.py` executa oito combinações em **casos fornecidos pelo pesquisador**. Quatro delas chamam `AutonomousHealthFlowHarness` real; as demais usam composição direta de SafetyEngine, contexto, inferência e CareRoutingAgent. O caso entrega **extração de sintomas pré-processada e fixa** para as variantes: não há solicitação ao Ollama durante o experimento. O campo `llm_calls` indica passos lógicos de extração e **não mede custo real de inferência LLM**. Latências medidas por esse runner não representam latência de ponta a ponta com Ollama ou serviços de localização reais.
+
+Nas configurações sem ML, o runner fornece um baseline `rule-baseline-v1` de severidade: sintomas leves conhecidos → PRIMARY_CARE; graves → URGENT_CARE; demais → URGENT_CARE. A lógica já existente do Safety Engine e do CareRoutingAgent continua podendo elevar a classe. Trata-se de um baseline **ilustrativo de desenvolvimento**, não regra clínica validada. A ação `RUN_ML` do Harness ainda é usada tecnicamente como porta comum para comparar classificadores, mesmo quando contém o baseline por regras: para uma ablação em produção, renomear a etapa genericamente.
+
+O cenário sem Harness não contém os limites e os rastros do planner/policy. A ferramenta registra os níveis de saída, tempos e contagens de passos, mas ainda **não** implementa oráculo independente de violações, falhas injetadas, intervalos de confiança nem modelagem de erros por paciente. O campo `invariant_violations=0` significa **não identificado pelo runner**, não ausência de falhas comprovada.
+
+### Formato do corpus (JSONL)
+
+Cada linha contém:
+- `case_id`: identificador opaco e exclusivo.
+- `report`: relato com informações desidentificadas e uso autorizado.
+- `extraction`: objeto `SymptomExtraction`, produzido de modo congelado e documentado.
+- `reference_level`: um de `PRIMARY_CARE`, `URGENT_CARE`, `EMERGENCY`, estabelecido por anotação independente.
+- `patient_record` (opcional): objeto `PatientRecord` compatível com os esquemas do projeto, **sem identificadores reais**. `user_id` é substituído internamente por UUID derivado de `case_id`. Essa intervenção só é válida como prontuário verdadeiramente disponível no instante da decisão.
+
+Exemplo **sintético para testar a ferramenta**, não para publicar métricas:
+
+```jsonl
+{"case_id":"fixture-1","report":"estou com tosse leve","extraction":{"symptoms":["cough"],"severity":"mild"},"reference_level":"PRIMARY_CARE"}
+```
+
+Uso após treinar o modelo sintético compatível com o fluxo de sintomas:
+
+```bash
+make train
+uv run python benchmarks/scripts/run_factorial_ablation.py \\
+  --cases /caminho/para/casos_autorizados.jsonl \\
+  --model-dir models/synthetic-v1 \\
+  --output /caminho/seguro/ablacao_8_cenarios.jsonl
+
+uv run python benchmarks/analyze_factorial_ablation.py \\
+  /caminho/seguro/ablacao_8_cenarios.jsonl \\
+  --output /caminho/seguro/resumo_ablacao.json
+```
+
+**Não use o MIMIC-IV-ED bruto nesse runner:** sua triagem estruturada não possui automaticamente relatos, extrações em português, campos de prontuário equivalentes e rótulos de referência independentes exigidos pelo teste de ponta a ponta. Não publique arquivos de dados restritos no repositório.
+
+O arquivo de análise exige oito variantes por caso, um único hash de corpus e apenas partição de teste. Os resultados gerados só devem ser chamados de benchmark científico após auditoria de proveniência, suporte das classes e preparação de conjunto independente. Os testes automatizados do runner verificam programação, não equivalência clínica.
