@@ -72,8 +72,10 @@ def components(
 ) -> tuple[FrozenIntent, RoutingInferenceService, NavigationAgent, FrozenContext]:
     intent = FailingIntent(EXTRACTION) if failure == "llm" else FrozenIntent(EXTRACTION)
     inference = FailingInference() if failure == "ml" else RuleBaseline()
-    nav = FailingNavigation() if failure == "facilities" else NavigationAgent(
-        MockFacilityProvider([]), 25
+    nav = (
+        FailingNavigation()
+        if failure == "facilities"
+        else NavigationAgent(MockFacilityProvider([]), 25)
     )
     context = FrozenContext(None, True)
     return intent, inference, nav, context
