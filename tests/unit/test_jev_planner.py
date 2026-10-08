@@ -10,6 +10,8 @@ from app.harness.policy import HarnessPolicy
 from app.harness.state import HarnessState
 from app.safety.schemas import SafetyAssessment
 from app.schemas.care import CareLevel, ServiceType
+from app.schemas.patient import PatientContext
+from app.schemas.symptoms import SymptomExtraction
 from app.schemas.routing import RoutingDecision
 
 pytestmark = pytest.mark.anyio
@@ -59,6 +61,10 @@ def routing_ready_state() -> HarnessState:
         matched_rules=[],
         suggested_minimum_care_level=None,
     )
+    # These stages are marked as completed below; their outputs must exist.
+    # Otherwise the deterministic fallback correctly treats extraction as failed.
+    state.extracted_symptoms = SymptomExtraction()
+    state.patient_context = PatientContext()
     state.safety_assessment = SafetyAssessment(
         has_red_flag=False,
         matched_rules=[],
