@@ -13,10 +13,10 @@
 | C | Safety Engine, regras simuladas, *override* | ✅ implementado |
 | D | Agent Harness, Care Routing, Context Builder | ✅ implementado |
 | E | `MockFacilityProvider`, distância, seleção de unidade, endpoint | ✅ implementado |
-| F | PostgreSQL, prontuário persistido, auditoria, autenticação real | ⏳ planejado (Postgres+pgvector já sobe no compose) |
+| F | PostgreSQL, persistência do prontuário simplificado, auditoria, autenticação real | ⏳ planejado (Postgres+pgvector já sobe no compose) |
 | G | pgvector, pipeline RAG, documentos oficiais | ⏳ planejado |
-| Etapa 2 | Medicamentos no SUS (`MedicationAgent` + RAG) | ⏳ planejado |
-| Etapa 3 | Planos de saúde (`InsuranceAgent`, `ProviderAgent`) | ⏳ planejado |
+| Fase 2 | Exames, procedimentos e cobertura SUS/plano | ⏳ planejado |
+| Fase 3 | Localização de medicamentos | ⏳ planejado |
 
 Estilo: **monólito modular FastAPI**. Sem filas, microsserviços ou orquestradores externos.
 
@@ -210,9 +210,10 @@ já dispara uma *red flag*, a resposta de emergência sai sem chamar o LLM.
 ### Extensão futura: intents
 
 `Intent` já tem `CARE_ROUTING`, `MEDICATION` e `INSURANCE`, mas só `CARE_ROUTING` tem ações permitidas
-(`ALLOWED_ACTIONS`). Para as outras, a *policy* recusa qualquer ação. `MedicationAgent` e
-`InsuranceAgent` serão novas ações registradas no executor, com seu próprio conjunto permitido e o mesmo
-loop.
+(`ALLOWED_ACTIONS`). Para as outras, a *policy* recusa qualquer ação. Na Fase 2, o domínio de
+`INSURANCE` será ampliado para exames/procedimentos e cobertura SUS/plano. Na Fase 3,
+`MEDICATION` será usado para localização de medicamentos. Novas ações devem entrar no mesmo loop,
+sempre validadas pela *policy*.
 
 ### LLMPlanner (futuro, experimental)
 
@@ -271,13 +272,35 @@ autoridade: uma escolha inválida aborta. Deve ficar atrás de configuração, s
   limitado para JSON inválido. Erros viram `LLMUnavailableError` / `LLMResponseError`.
 - O LLM **só recebe o relato**. Prontuário e contexto nunca são enviados a ele.
 
-## Prontuário e Context Builder
+## Prontuário inicial e Context Builder
+
+O prontuário já faz parte da **Fase 1**, mas de forma deliberadamente simples.
 
 - `PatientRepository` (Protocol). Hoje: `InMemoryPatientRepository` com **um paciente fictício**.
-  Fase F: implementação SQLAlchemy. Nenhuma integração com sistemas do SUS.
-- `PatientContextBuilder` aplica minimização: remove nome e histórico livre; inclui alergias só se os
-  sintomas sugerirem reação alérgica, anticoagulantes só se houver sangramento/trauma/sinal
-  neurológico; condições viram fatores de risco categóricos.
+- `PatientRecord` representa um perfil inicial simplificado com idade, alergias, condições,
+  medicamentos ativos e encontros anteriores.
+- Na decisão atual, o `PatientContextBuilder` usa apenas o subconjunto necessário: faixa etária,
+  fatores de risco categóricos, condições relevantes, alergias quando relacionadas ao relato e
+  anticoagulantes quando relacionados a sangramento, trauma ou sinais neurológicos.
+- Nome e resumos livres de encontros anteriores são removidos do contexto usado na decisão.
+- O histórico longitudinal completo ainda **não** participa do roteamento.
+- Não existe integração com prontuário nacional, hospitalar ou sistemas reais do SUS.
+- A persistência em PostgreSQL é uma evolução posterior; a Fase 1 primeiro valida a arquitetura com
+  contexto sintético e mínimo.
+
+A intenção é começar com:
+
+```text
+relato atual
+  +
+perfil clínico inicial mínimo
+  ↓
+Context Builder
+  ↓
+Safety / ML / Routing
+```
+
+e somente depois ampliar para contexto longitudinal persistido.
 
 ## Geolocalização
 
@@ -355,23 +378,47 @@ document_chunks(id, document_id, content, embedding vector, metadata)
 
 Consulta → embedding → pgvector → *chunks* com metadados → agente → resposta **com fonte**.
 
-## Etapa 2 — Medicamentos no SUS (planejado)
+## Fase 2 — Exames, procedimentos e cobertura (planejado)
+
+A Fase 2 amplia a navegação para responder, com fontes verificáveis:
 
 ```text
-Harness → MedicationAgent → RAG (fontes oficiais, ex.: RENAME) → regras de acesso
-        → FacilityProvider (pontos de dispensação) → resposta + fonte
+Exame / procedimento
+        ↓
+   ┌────┴────┐
+   ▼         ▼
+  SUS      Plano
+   │         │
+   ▼         ▼
+oferta /   cobertura do
+acesso     produto contratado
+   └────┬────┘
+        ▼
+opções e locais compatíveis
 ```
 
-O LLM não pode afirmar disponibilidade sem documento recuperado que a sustente.
+A cobertura deve ser verificada pelo produto/plano específico, não apenas pelo nome da operadora.
+Quando necessário, essa fase poderá usar RAG sobre fontes oficiais. Sem fonte verificável, o sistema
+não deve afirmar disponibilidade ou cobertura.
 
-## Etapa 3 — Planos de saúde (planejado)
+## Fase 3 — Medicamentos (planejado)
 
 ```text
-Harness → InsuranceAgent (produto/plano específico) → cobertura + rede verificável
-        → ProviderAgent (especialistas/hospitais) → localização → resposta
+Medicamento informado ou já prescrito
+        ↓
+MedicationAgent
+        ↓
+fontes verificáveis de disponibilidade
+        ↓
+SUS / pontos de dispensação / rede privada
+        ↓
+localização
+        ↓
+opções próximas
 ```
 
-Conhecer a operadora não basta: a cobertura depende do produto contratado.
+A Fase 3 trata de localizar disponibilidade. Ela não decide qual medicamento o usuário deve tomar e
+não substitui prescrição profissional.
 
 
 ## Planner Jev opcional
