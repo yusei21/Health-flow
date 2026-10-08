@@ -1,10 +1,9 @@
+import numpy as np
 import pytest
 
-from app.ml.training.train import PreparedData, validate_external_evaluation_split
 from app.ml.splits import split_train_test
+from app.ml.training.train import PreparedData, validate_external_evaluation_split
 from benchmarks.scripts.audit_results import audit_record, wilson_interval
-
-import numpy as np
 
 
 def test_wilson_interval_contains_observed_rate() -> None:
