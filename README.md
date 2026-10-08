@@ -414,6 +414,50 @@ HEALTHFLOW_LLM_MODEL=llama3.2:3b
 
 Reinicie a API após mudar o `.env`. Não use relatos reais de pacientes nos benchmarks.
 
+## Comparação de modelos LLM — preparada, sem resultados inventados
+
+O **Qwen3 4B é somente o modelo padrão**, não uma dependência fixa do Harness. A implementação usa `LLMProvider` e um cliente OpenAI-compatible para o Ollama. Troque `HEALTHFLOW_LLM_MODEL` no `.env` para executar a aplicação com outro modelo que suporte saída estruturada no endpoint configurado. O protocolo também permite implementar outros provedores pela mesma interface.
+
+Para um **benchmark publicável**, não são aceitos os 12 relatos fictícios incluídos como exemplos de desenvolvimento em `benchmarks/llm/cases.jsonl`. Você precisa fornecer um conjunto rotulado obtido legitimamente, com termos de uso conhecidos e anotações verificadas. O comando se recusa a executar sem o arquivo de proveniência. Nenhuma métrica real foi produzida por essa mudança.
+
+Formato do arquivo de casos `/caminho/seguro/cases.jsonl`, um JSON por linha:
+
+```json
+{"case_id":"identificador-opaco","report":"texto da fonte autorizada","symptoms":["cough"],"severity":"unknown","duration_minutes":null,"age":null}
+```
+
+Os valores são **apenas a descrição do esquema**, não um caso para benchmark. Os sintomas devem pertencer ao enum `Symptom`, e os rótulos devem ser anotados/revisados independentemente das previsões dos modelos testados.
+
+Formato do arquivo `/caminho/seguro/provenance.json`:
+
+```json
+{
+  "dataset_name": "NOME_DA_FONTE",
+  "source_url": "URL_DA_FONTE",
+  "source_version": "VERSAO_EXATA",
+  "license_or_access_terms": "LICENCA_OU_TERMO_DE_USO",
+  "annotation_method": "COMO_OS_ROTULOS_FORAM_OBTIDOS_E_REVISADOS",
+  "language": "pt-BR",
+  "clinical_validation": false
+}
+```
+
+Com o Ollama em execução e os modelos já baixados, compare um por vez **no mesmo arquivo**:
+
+```bash
+make benchmark-llm LLM_MODEL=qwen3:4b \
+  LLM_CASES=/caminho/seguro/cases.jsonl \
+  LLM_PROVENANCE=/caminho/seguro/provenance.json
+
+make benchmark-llm LLM_MODEL=llama3.2:3b \
+  LLM_CASES=/caminho/seguro/cases.jsonl \
+  LLM_PROVENANCE=/caminho/seguro/provenance.json
+```
+
+O script gera JSON imutável em `benchmarks/results/llm/`, incluindo `dataset_sha256`, proveniência, modelo, commit, precisão, recall, F1, correspondência exata, validade de esquema, falhas e latência p50/p95. Só compare execuções com o **mesmo hash dos casos**, protocolo de anotação e ambiente documentado. Essa comparação avalia **extração de sintomas**, não qualidade de encaminhamento. É necessário validar também a adequação do prompt ao idioma da fonte (o prompt atual é em português).
+
+Em particular, MIMIC-IV-ED exige acesso autorizado e restrições próprias: não envie relatos restritos a provedores externos e não publique o texto dos pacientes ou identificadores. Dados reais não são incluídos no repositório. O experimento C de MIMIC com relato em texto ainda requer pipeline próprio e validação de rótulos de extração; os rótulos de ESI não são rótulos de sintomas.
+
 ## Machine Learning e datasets
 
 O projeto possui suporte para:
