@@ -28,7 +28,22 @@ Busca de unidade compatível
 Resposta para o usuário
 ```
 
-O Agent Harness escolhe dinamicamente a próxima ação dentro de um conjunto fechado de ações permitidas. As regras de segurança têm prioridade sobre o LLM e sobre o modelo de Machine Learning.
+O Agent Harness executa o `DeterministicPlanner`, que escolhe a próxima ação a partir do estado. A `HarnessPolicy` valida cada escolha antes da execução. O Jev está fora do fluxo da API nesta fase; seu código foi preservado para experimentos posteriores.
+
+## Situação experimental (outubro de 2026)
+
+A comparação preliminar `synthetic_baseline` foi concluída com quatro modelos e 4.000
+exemplos gerados por regras. Na execução `eb0307e7` (commit `f0ac6eb`, árvore limpa),
+o Random Forest foi selecionado pela validação cruzada. No teste reservado de 800
+exemplos, obteve F1 macro de 0,9189 e recall da classe `EMERGENCY` de 0,8913.
+A Regressão Logística obteve 0,8788 e 0,8406; a Árvore de Decisão, 0,8478 e
+0,8043; a MLP, 0,8861 e 0,7899, respectivamente.
+
+Esses dados medem a correspondência aos rótulos do gerador sintético. Não são
+validação clínica, nem avaliação do encaminhamento final após o Safety Engine.
+Os experimentos externos com MIMIC-IV-ED e Triagegeist ainda não têm resultados.
+Os testes automatizados e a integração local com Ollama não substituem esses
+experimentos. Tabelas e condições de avaliação: [docs/machine-learning.md](docs/machine-learning.md).
 
 ## Fases do projeto
 
