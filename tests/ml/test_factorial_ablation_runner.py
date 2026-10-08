@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -12,7 +13,7 @@ import pytest
 from benchmarks.scripts.run_factorial_ablation import load_cases, run_case
 
 
-def sample() -> dict:
+def sample() -> dict[str, Any]:
     return {
         "case_id": "synthetic-case-001",
         "report": "estou com tosse leve",
