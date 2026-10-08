@@ -37,6 +37,12 @@ class FacilityProviderError(HealthFlowError):
     public_message = "A busca de unidades de saúde está indisponível."
 
 
+class JevProviderError(HealthFlowError):
+    """The optional Jev decision provider is unavailable or returned invalid data."""
+
+    public_message = "O planejador remoto está indisponível."
+
+
 class SafetyEngineError(HealthFlowError):
     public_message = "Falha na verificação de segurança."
 
