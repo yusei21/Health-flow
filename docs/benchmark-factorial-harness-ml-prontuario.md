@@ -156,7 +156,7 @@ Uso após treinar o modelo sintético compatível com o fluxo de sintomas:
 
 ```bash
 make train
-uv run python benchmarks/scripts/run_factorial_ablation.py \\
+uv run python -m benchmarks.scripts.run_factorial_ablation \\
   --cases /caminho/para/casos_autorizados.jsonl \\
   --model-dir models/synthetic-v1 \\
   --output /caminho/seguro/ablacao_8_cenarios.jsonl
@@ -169,3 +169,8 @@ uv run python benchmarks/analyze_factorial_ablation.py \\
 **Não use o MIMIC-IV-ED bruto nesse runner:** sua triagem estruturada não possui automaticamente relatos, extrações em português, campos de prontuário equivalentes e rótulos de referência independentes exigidos pelo teste de ponta a ponta. Não publique arquivos de dados restritos no repositório.
 
 O arquivo de análise exige oito variantes por caso, um único hash de corpus e apenas partição de teste. Os resultados gerados só devem ser chamados de benchmark científico após auditoria de proveniência, suporte das classes e preparação de conjunto independente. Os testes automatizados do runner verificam programação, não equivalência clínica.
+
+
+### Correção de invocação
+
+O executor deve ser iniciado a partir da raiz do repositório com `uv run python -m benchmarks.scripts.run_factorial_ablation`, **não** `uv run python benchmarks/scripts/run_factorial_ablation.py`, pois este último modo não garante a resolução do pacote `app`. O caminho `/caminho/para/casos_autorizados.jsonl` é ilustrativo e deve ser substituído por um arquivo existente. Só execute o analisador depois que o JSONL de saídas tiver sido gerado.
