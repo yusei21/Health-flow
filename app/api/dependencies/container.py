@@ -22,6 +22,7 @@ from app.repositories.patients import (
     synthetic_demo_patient,
 )
 from app.safety.engine import SafetyEngine
+from app.tools.cnes_registry import CNESFacilityProvider
 from app.tools.osm_facilities import OpenStreetMapFacilityProvider
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,10 @@ def build_container(settings: Settings) -> Container:
         inference=inference,
         routing_agent=CareRoutingAgent(settings.ml_low_confidence_threshold),
         navigation_agent=NavigationAgent(
-            OpenStreetMapFacilityProvider(), settings.facility_search_radius_km
+            CNESFacilityProvider(settings.cnes_database)
+            if settings.cnes_database is not None
+            else OpenStreetMapFacilityProvider(),
+            settings.facility_search_radius_km,
         ),
     )
     return Container(
