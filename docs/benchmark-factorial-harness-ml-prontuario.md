@@ -200,3 +200,21 @@ uv run python benchmarks/analyze_factorial_ablation.py \\
 Esperam-se 60 pares de casos e 480 linhas de predição (60 casos multiplicados por oito combinações). O analisador devolve medidas **descritivas** que apenas ajudam a detectar diferenças de implementação. Uma avaliação do efeito do contexto exige rótulos revisados independentemente, análise pareada de mudanças por perfil, controle de confundimento e discussão da procedência do conjunto. Para medir a contribuição do Harness, executar também testes de injeção de falhas, limites, passos e falhas de provedores, já que acurácia de roteamento isolada não testa esses benefícios.
 
 O modelo sintético empregado foi treinado em dados também sintéticos; situações semelhantes às de treino não comprovam generalização. A segurança não está validada clinicamente. O conteúdo de `benchmarks/results/` deve ser revisado antes de qualquer publicação.
+
+
+## Diagnósticos complementares: prontuário e resiliência
+
+**Sensibilidade pareada do ML ao prontuário:** `benchmarks/scripts/analyze_context_sensitivity.py` compara as mesmas 60 extrações com contexto ausente e presente, antes da regra de segurança e do encaminhamento final. Mede quantidade de vetores de atributos alterados, probabilidades alteradas, classes do modelo alteradas e maior variação por caso. Isso responde se o classificador **usa** esses dados, não se seria **clinicamente correto** usá-los. Caso a classe ML varie sem que a decisão final varie, o encaminhamento pode ter sido preservado pelas regras de segurança ou pela política de roteamento; investigar separadamente.
+
+**Resiliência:** `benchmarks/scripts/evaluate_harness_resilience.py` executa cinco cenários determinísticos (controle, falha de ML, falha na busca de unidades, falha na extração e ação de planner proibida), com infraestrutura simulada e sem rede. Registra se a exceção é propagada ou tratada e se houve decisão. Não é estimativa estatística de confiabilidade ou de frequência de falhas. A condição `policy` não é diretamente equivalente no fluxo sem planner, identificada como `not_applicable`, para não sugerir simetria inexistente.
+
+```bash
+uv run python -m benchmarks.scripts.analyze_context_sensitivity \\
+  --cases benchmarks/fixtures/ablacao_piloto.jsonl \\
+  --model-dir models/synthetic-v1 \\
+  --output benchmarks/results/context_sensitivity_piloto.json
+uv run python -m benchmarks.scripts.evaluate_harness_resilience \\
+  --output benchmarks/results/harness_resilience_piloto.json
+```
+
+Os resultados dos dois scripts permanecem **diagnósticos de engenharia sobre casos fictícios**. A demonstração de efeito clínico do prontuário único requer acesso legal aos dados, referências independentes e protocolo aprovado; o repositório atual não possui integração a prontuário real. Evitar uso de `invariant_violations=0` como prova de segurança quando não foi utilizado um oráculo de invariantes.
