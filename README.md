@@ -388,6 +388,32 @@ HEALTHFLOW_JEV_MIN_PROBABILITY=0.70
 
 Nunca coloque a chave do Jev no frontend ou no Git. Sem essa configuração, o projeto continua funcionando normalmente com o planner determinístico.
 
+## Comparação de LLMs (benchmark de extração)
+
+O **Qwen não é fixo no Harness**. A interface `LLMProvider` separa o agente de intenção do cliente de inferência. Por padrão, a API usa Ollama com `qwen3:4b`, mas o modelo pode ser alterado por `HEALTHFLOW_LLM_MODEL`, e o endpoint compatível por `HEALTHFLOW_LLM_BASE_URL`.
+
+Para comparar dois modelos locais no **mesmo conjunto de relatos fictícios**:
+
+```bash
+ollama pull qwen3:4b
+ollama pull llama3.2:3b
+
+make benchmark-llm LLM_MODEL=qwen3:4b
+make benchmark-llm LLM_MODEL=llama3.2:3b
+```
+
+Casos rotulados: `benchmarks/llm/cases.jsonl`. Implementação: `benchmarks/scripts/benchmark_llm.py`. Cada execução escreve um JSON novo, sem sobrescrever os anteriores, em `benchmarks/results/llm/`. O JSON registra modelo, endpoint, commit Git, data, casos, falhas por tipo, taxa de saídas estruturadas válidas, exact match, precisão/recall/F1 micro de sintomas e latência p50/p95 das chamadas bem-sucedidas. O tempo total inclui falhas.
+
+**Interpretação:** são apenas casos fictícios escritos manualmente, não benchmarks clínicos, nem uma avaliação de encaminhamento. Resultados servem para verificar o pipeline experimental. Para o artigo, amplie e congele um conjunto independente de referência antes de executar a comparação definitiva. Use o mesmo hardware, versão do Ollama, parâmetros, prompt, ordem de casos e condições de aquecimento para todos os modelos. É recomendável executar múltiplas repetições e relatar a variância. O modelo precisa oferecer geração estruturada compatível com o endpoint configurado.
+
+Para trocar apenas o modelo usado pela API, sem benchmark:
+
+```bash
+HEALTHFLOW_LLM_MODEL=llama3.2:3b
+```
+
+Reinicie a API após mudar o `.env`. Não use relatos reais de pacientes nos benchmarks.
+
 ## Machine Learning e datasets
 
 O projeto possui suporte para:
