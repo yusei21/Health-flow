@@ -379,55 +379,18 @@ AutonomousHealthFlowHarness
 
 O planner escolhe o próximo passo permitido de acordo com o estado atual. A policy impede ações inválidas, e o Safety Engine mantém prioridade sobre qualquer decisão de ML ou LLM.
 
-## Jev Planner experimental
+## Planner da Fase 1
 
-O Harness usa o `DeterministicPlanner` por padrão. Opcionalmente, o backend pode usar o Jev como planner remoto para escolher a próxima ação entre as ações que a `HarnessPolicy` permite naquele estado.
+A composição da API usa exclusivamente o `DeterministicPlanner`. Cada ação proposta
+passa pela `HarnessPolicy`, que controla pré-condições, limites e a precedência das
+regras de segurança. O código experimental do Jev permanece em `app/harness/jev.py`,
+sem integração ativa na aplicação. Variáveis antigas do Jev no `.env` não o habilitam.
 
-A hierarquia continua:
+## Modelo local de linguagem
 
-```text
-Safety Engine > Policy > Planner > Agents / Models / Tools
-```
-
-O Jev não recebe relato clínico bruto, prontuário, identificador do paciente nem coordenadas. Ele recebe somente um estado abstrato do workflow, como ações já concluídas, presença de red flag e ações permitidas. Se houver timeout, erro HTTP, resposta inválida, ação proibida ou probabilidade abaixo do limite, o sistema volta automaticamente para o `DeterministicPlanner`.
-
-Para habilitar:
-
-```bash
-HEALTHFLOW_HARNESS_PLANNER=jev
-HEALTHFLOW_JEV_ENABLED=true
-HEALTHFLOW_JEV_API_KEY=sua-chave
-HEALTHFLOW_JEV_MODEL=jev-latest
-HEALTHFLOW_JEV_MIN_PROBABILITY=0.70
-```
-
-Nunca coloque a chave do Jev no frontend ou no Git. Sem essa configuração, o projeto continua funcionando normalmente com o planner determinístico.
-
-## Comparação de LLMs (benchmark de extração)
-
-O **Qwen não é fixo no Harness**. A interface `LLMProvider` separa o agente de intenção do cliente de inferência. Por padrão, a API usa Ollama com `qwen3:4b`, mas o modelo pode ser alterado por `HEALTHFLOW_LLM_MODEL`, e o endpoint compatível por `HEALTHFLOW_LLM_BASE_URL`.
-
-Para comparar dois modelos locais no **mesmo conjunto de relatos fictícios**:
-
-```bash
-ollama pull qwen3:4b
-ollama pull llama3.2:3b
-
-make benchmark-llm LLM_MODEL=qwen3:4b
-make benchmark-llm LLM_MODEL=llama3.2:3b
-```
-
-Casos rotulados: `benchmarks/llm/cases.jsonl`. Implementação: `benchmarks/scripts/benchmark_llm.py`. Cada execução escreve um JSON novo, sem sobrescrever os anteriores, em `benchmarks/results/llm/`. O JSON registra modelo, endpoint, commit Git, data, casos, falhas por tipo, taxa de saídas estruturadas válidas, exact match, precisão/recall/F1 micro de sintomas e latência p50/p95 das chamadas bem-sucedidas. O tempo total inclui falhas.
-
-**Interpretação:** são apenas casos fictícios escritos manualmente, não benchmarks clínicos, nem uma avaliação de encaminhamento. Resultados servem para verificar o pipeline experimental. Para o artigo, amplie e congele um conjunto independente de referência antes de executar a comparação definitiva. Use o mesmo hardware, versão do Ollama, parâmetros, prompt, ordem de casos e condições de aquecimento para todos os modelos. É recomendável executar múltiplas repetições e relatar a variância. O modelo precisa oferecer geração estruturada compatível com o endpoint configurado.
-
-Para trocar apenas o modelo usado pela API, sem benchmark:
-
-```bash
-HEALTHFLOW_LLM_MODEL=llama3.2:3b
-```
-
-Reinicie a API após mudar o `.env`. Não use relatos reais de pacientes nos benchmarks.
+O Qwen3 4B é o padrão, mas o agente de extração usa a interface `LLMProvider`.
+É possível trocar `HEALTHFLOW_LLM_MODEL` por outro modelo com suporte à API e à
+saída estruturada exigidas pelo projeto. Reinicie a aplicação após a mudança.
 
 ## Comparação de modelos LLM — preparada, sem resultados inventados
 
