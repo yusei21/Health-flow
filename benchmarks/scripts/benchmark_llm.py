@@ -133,8 +133,7 @@ async def evaluate(
         ),
         "latency_ms_p50": statistics.median(latencies) if latencies else None,
         "latency_ms_p95": (
-            sorted(latencies)[math.ceil(len(latencies) * 0.95) - 1]
-            if latencies else None
+            sorted(latencies)[math.ceil(len(latencies) * 0.95) - 1] if latencies else None
         ),
         "wall_time_seconds": round(time.perf_counter() - started, 3),
         "note": (
@@ -164,9 +163,7 @@ def main() -> None:
     settings = Settings(llm_model=args.model) if args.model else Settings()
     if not args.cases.is_file() or not args.provenance.is_file():
         parser.error("cases and provenance files must exist")
-    provenance = DatasetProvenance.model_validate_json(
-        args.provenance.read_text(encoding="utf-8")
-    )
+    provenance = DatasetProvenance.model_validate_json(args.provenance.read_text(encoding="utf-8"))
     if args.cases.resolve() == Path("benchmarks/llm/cases.jsonl").resolve():
         parser.error("bundled fictional smoke-test cases are not accepted for article benchmarks")
     cases = load_cases(args.cases)
@@ -178,8 +175,7 @@ def main() -> None:
         json.dump(result, stream, ensure_ascii=False, indent=2)
     sys.stdout.write(f"Benchmark saved: {output}\n")
     sys.stdout.write(
-        f"model={result['model']} cases={result['case_count']} "
-        f"completed={result['completed']}\n"
+        f"model={result['model']} cases={result['case_count']} completed={result['completed']}\n"
     )
 
 
