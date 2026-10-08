@@ -55,7 +55,7 @@ um LLM executar operações arbitrárias: nada fora do enum `HarnessAction` pode
 AutonomousHealthFlowHarness            app/harness/autonomous_harness.py
 ├── Planner        (Protocol)          app/harness/planner.py   next_action(state) -> PlannedAction
 │   ├── DeterministicPlanner           padrão; regras sobre o HarnessState
-│   └── LLMPlanner                     futuro, experimental (não implementado)
+│   └── JevPlanner                     código experimental preservado, fora da composição da API
 ├── HarnessPolicy  (policy/guard)      app/harness/policy.py    validate(action, state)
 ├── ActionExecutor (registry)          app/harness/executor.py  um handler tipado por ação
 ├── HarnessState                       app/harness/state.py     dados + trilha de auditoria
@@ -66,7 +66,7 @@ AutonomousHealthFlowHarness            app/harness/autonomous_harness.py
 
 ```python
 while not state.finished:
-    planned = planner.next_action(state)  # propõe UMA ação + reason_code
+    planned = await planner.next_action(state)  # propõe UMA ação + reason_code
     policy.validate(planned, state)  # ordem de segurança, conjunto permitido, orçamentos
     await executor.execute(planned, state)  # handler do registry; registra histórico
 ```
@@ -215,12 +215,13 @@ já dispara uma *red flag*, a resposta de emergência sai sem chamar o LLM.
 `MEDICATION` será usado para localização de medicamentos. Novas ações devem entrar no mesmo loop,
 sempre validadas pela *policy*.
 
-### LLMPlanner (futuro, experimental)
+### Jev fora da execução atual
 
-O mesmo `Protocol`. O LLM receberia **só** o resumo estruturado do estado (ações já feitas, flags, sem
-relato nem prontuário) e escolheria uma ação do enum por saída estruturada. A *policy* continua sendo a
-autoridade: uma escolha inválida aborta. Deve ficar atrás de configuração, ser comparado ao
-`DeterministicPlanner` por *replay* de casos e nunca ser o padrão sem avaliação.
+A API instancia apenas o `DeterministicPlanner` em `app/api/dependencies/container.py`.
+O código do `JevPlanner` permanece no repositório para estudo, mas as variáveis antigas
+`HEALTHFLOW_HARNESS_PLANNER` e `HEALTHFLOW_JEV_ENABLED` não ativam chamadas externas.
+A integração não participa do fluxo de atendimento, da seleção do classificador nem
+dos resultados experimentais da Fase 1. Uma eventual retomada exigirá avaliação própria.
 
 ## Invariantes de segurança
 
