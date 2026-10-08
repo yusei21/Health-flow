@@ -15,8 +15,8 @@ from uuid import UUID, uuid5
 
 from app.agents.care_routing_agent import CareRoutingAgent
 from app.agents.intent_agent import IntentAgent
-from app.agents.patient_context_agent import PatientContextAgent
 from app.agents.navigation_agent import NavigationAgent
+from app.agents.patient_context_agent import PatientContextAgent
 from app.context.builder import PatientContextBuilder
 from app.harness.autonomous_harness import AutonomousHealthFlowHarness
 from app.harness.state import combine_assessments
