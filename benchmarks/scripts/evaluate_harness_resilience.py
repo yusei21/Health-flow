@@ -10,6 +10,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from app.agents.care_routing_agent import CareRoutingAgent
@@ -17,13 +18,13 @@ from app.agents.navigation_agent import NavigationAgent
 from app.core.exceptions import FacilityProviderError, LLMUnavailableError, MLInferenceError
 from app.harness.actions import HarnessAction, PlannedAction
 from app.harness.autonomous_harness import AutonomousHealthFlowHarness
-from app.ml.inference import RoutingInferenceService
-from app.schemas.routing import MLPrediction
 from app.harness.state import HarnessState
+from app.ml.inference import RoutingInferenceService
 from app.safety.engine import SafetyEngine
 from app.schemas.care import ServiceType
 from app.schemas.facility import FacilityMatch
 from app.schemas.patient import PatientContext
+from app.schemas.routing import MLPrediction
 from app.schemas.symptoms import SymptomExtraction
 from app.tools.facilities import MockFacilityProvider
 from benchmarks.scripts.run_factorial_ablation import FrozenContext, FrozenIntent, RuleBaseline
@@ -114,7 +115,7 @@ async def direct_trial(failure: str) -> dict[str, object]:
     return {"status": "completed", "decision": routing.care_level.value}
 
 
-async def evaluate() -> dict[str, object]:
+async def evaluate() -> dict[str, Any]:
     trials = []
     for failure in ("none", "ml", "facilities", "llm", "policy"):
         trials.append(
