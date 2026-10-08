@@ -14,6 +14,11 @@ class AppEnv(StrEnum):
     PRODUCTION = "production"
 
 
+class HarnessPlannerKind(StrEnum):
+    DETERMINISTIC = "deterministic"
+    JEV = "jev"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="HEALTHFLOW_", env_file=".env", extra="ignore", frozen=True
@@ -39,6 +44,14 @@ class Settings(BaseSettings):
 
     # Browser origins allowed to call the API (e.g. the Vite dev server). Empty = CORS off.
     cors_allowed_origins: list[str] = Field(default_factory=list)
+
+    harness_planner: HarnessPlannerKind = HarnessPlannerKind.DETERMINISTIC
+    jev_enabled: bool = False
+    jev_base_url: str = "https://jevmodel.org"
+    jev_model: str = "jev-latest"
+    jev_api_key: SecretStr | None = None
+    jev_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    jev_min_probability: float = Field(default=0.70, ge=0, le=1)
 
     @model_validator(mode="after")
     def _forbid_demo_auth_in_production(self) -> Self:
