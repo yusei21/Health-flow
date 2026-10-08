@@ -1,12 +1,13 @@
-"""Reproducible evaluation of local LLM symptom extraction on labeled, fictional cases.
+"""Reproducible LLM extraction benchmark on a user-supplied, documented labeled dataset.
 
-Does not measure routing quality or clinical safety. No user/patient records are read.
-JSON output is immutable per run; individual reports and predictions are not persisted.
+No invented cases are used by default. Refuse to run without dataset provenance.
+Does not assess clinical routing safety. Never persist raw reports or model outputs.
 """
 
 import argparse
 import asyncio
 import json
+import hashlib
 import platform
 import statistics
 import time
@@ -22,6 +23,17 @@ from app.core.exceptions import LLMError
 from app.llm.ollama_provider import OllamaLLMProvider
 from app.ml.training.benchmark import git_commit
 from app.schemas.symptoms import Severity, Symptom
+
+
+class DatasetProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dataset_name: str = Field(min_length=1)
+    source_url: str = Field(min_length=1)
+    source_version: str = Field(min_length=1)
+    license_or_access_terms: str = Field(min_length=1)
+    annotation_method: str = Field(min_length=1)
+    language: str = Field(min_length=1)
+    clinical_validation: bool = False
 
 
 class LabeledCase(BaseModel):
@@ -47,7 +59,12 @@ def extraction_scores(gold: set[Symptom], predicted: set[Symptom]) -> tuple[int,
     return len(gold & predicted), len(predicted - gold), len(gold - predicted)
 
 
-async def evaluate(cases: list[LabeledCase], settings: Settings) -> dict[str, object]:
+async def evaluate(
+    cases: list[LabeledCase],
+    settings: Settings,
+    provenance: DatasetProvenance,
+    dataset_sha256: str,
+) -> dict[str, object]:
     agent = IntentAgent(OllamaLLMProvider.from_settings(settings))
     tp = fp = fn = completed = exact = fields_correct = fields_total = 0
     errors: dict[str, int] = {}
@@ -90,7 +107,9 @@ async def evaluate(cases: list[LabeledCase], settings: Settings) -> dict[str, ob
         "git_commit": git_commit(),
         "python_version": platform.python_version(),
         "task": "structured_symptom_extraction",
-        "dataset_type": "fictional_manual_cases",
+        "dataset_type": "user_supplied_labeled",
+        "dataset_provenance": provenance.model_dump(),
+        "dataset_sha256": dataset_sha256,
         "model": settings.llm_model,
         "base_url": settings.llm_base_url,
         "temperature": 0,
@@ -112,19 +131,37 @@ async def evaluate(cases: list[LabeledCase], settings: Settings) -> dict[str, ob
             if latencies else None
         ),
         "wall_time_seconds": round(time.perf_counter() - started, 3),
-        "note": "Toy fictional cases, not clinical performance or evidence of safe triage.",
+        "note": (
+            "Measures symptom extraction agreement with supplied labels; not evidence "
+            "of clinical routing quality, safety, or generalization to SUS."
+        ),
     }
 
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cases", type=Path, default=Path("benchmarks/llm/cases.jsonl"))
+    parser.add_argument(
+        "--cases", type=Path, required=True,
+        help="JSONL with authorized real-source reports and independently checked labels",
+    )
+    parser.add_argument(
+        "--provenance", type=Path, required=True,
+        help="JSON describing source, version, access terms, annotation and language",
+    )
     parser.add_argument("--model", help="Override HEALTHFLOW_LLM_MODEL without editing .env")
     parser.add_argument("--output-dir", type=Path, default=Path("benchmarks/results/llm"))
     args = parser.parse_args()
     settings = Settings(llm_model=args.model) if args.model else Settings()
+    if not args.cases.is_file() or not args.provenance.is_file():
+        parser.error("cases and provenance files must exist")
+    provenance = DatasetProvenance.model_validate_json(
+        args.provenance.read_text(encoding="utf-8")
+    )
+    if args.cases.resolve() == Path("benchmarks/llm/cases.jsonl").resolve():
+        parser.error("bundled fictional smoke-test cases are not accepted for article benchmarks")
     cases = load_cases(args.cases)
-    result = await evaluate(cases, settings)
+    dataset_sha256 = hashlib.sha256(args.cases.read_bytes()).hexdigest()
+    result = await evaluate(cases, settings, provenance, dataset_sha256)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     output = args.output_dir / f"{result['timestamp_utc'][:10]}_{result['run_id']}.json"
     with output.open("x", encoding="utf-8") as stream:
