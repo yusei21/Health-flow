@@ -37,7 +37,9 @@ class AuditResult(BaseModel):
     flags: list[str]
 
 
-def wilson_interval(successes: int, total: int, z: float = 1.959963984540054) -> tuple[float, float] | None:
+def wilson_interval(
+    successes: int, total: int, z: float = 1.959963984540054
+) -> tuple[float, float] | None:
     if total == 0:
         return None
     p = successes / total
@@ -45,7 +47,10 @@ def wilson_interval(successes: int, total: int, z: float = 1.959963984540054) ->
     denominator = 1 + z2 / total
     center = (p + z2 / (2 * total)) / denominator
     margin = z * math.sqrt(p * (1 - p) / total + z2 / (4 * total * total))
-    return round(max(0.0, center - margin), 4), round(min(1.0, center + margin), 4)
+    return (
+        round(max(0.0, center - margin), 4),
+        round(min(1.0, center + margin), 4),
+    )
 
 
 def audit_record(record: dict[str, object]) -> AuditResult:
@@ -93,7 +98,11 @@ def audit_record(record: dict[str, object]) -> AuditResult:
         model=str(record["model_name"]),
         selected_by_cv=bool(record["selected_for_deployment"]),
         test_rows=int(record["test_rows"]),
-        patients=int(record["number_of_patients"]) if record.get("number_of_patients") is not None else None,
+        patients=(
+            int(record["number_of_patients"])
+            if record.get("number_of_patients") is not None
+            else None
+        ),
         accuracy=float(metrics["accuracy"]),
         macro_f1=float(metrics["macro_f1"]),
         emergency_recall=round(correct / support, 4) if support else 0.0,
@@ -107,8 +116,12 @@ def audit_record(record: dict[str, object]) -> AuditResult:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("paths", nargs="+", type=Path, help="Immutable per-model benchmark JSONs")
-    parser.add_argument("--output", type=Path, default=Path("benchmarks/results/audit.json"))
+    parser.add_argument(
+        "paths", nargs="+", type=Path, help="Immutable per-model benchmark JSONs"
+    )
+    parser.add_argument(
+        "--output", type=Path, default=Path("benchmarks/results/audit.json")
+    )
     args = parser.parse_args()
     records = [json.loads(path.read_text(encoding="utf-8")) for path in args.paths]
     results = [audit_record(record) for record in records]
@@ -119,14 +132,16 @@ def main() -> None:
         parser.error("Duplicate model records")
     if len({r.model for r in results}) != 4:
         parser.error("Expected all four candidate models in the same run")
-    if len({r.selected_by_cv for r in results if r.selected_by_cv}) != 1:
+    if sum(r.selected_by_cv for r in results) != 1:
         parser.error("Expected exactly one model selected by CV")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as file:
         json.dump(
-            {"scope": "descriptive_model_only_not_full_harness",
-             "interval_method": "Wilson 95%, row-level, not adjusted for patient clusters",
-             "results": [r.model_dump(mode="json") for r in results]},
+            {
+                "scope": "descriptive_model_only_not_full_harness",
+                "interval_method": "Wilson 95%, row-level, not adjusted for patient clusters",
+                "results": [r.model_dump(mode="json") for r in results],
+            },
             file,
             indent=2,
             ensure_ascii=False,
