@@ -1,0 +1,12 @@
+{"case_id":"f01","report":"Estou com tosse e coriza há dois dias.","symptoms":["cough","runny_nose"],"severity":"unknown","duration_minutes":2880,"age":null}
+{"case_id":"f02","report":"Tenho dor de cabeça leve há 30 minutos.","symptoms":["headache"],"severity":"mild","duration_minutes":30,"age":null}
+{"case_id":"f03","report":"Estou com dor de garganta há uma hora.","symptoms":["sore_throat"],"severity":"unknown","duration_minutes":60,"age":null}
+{"case_id":"f04","report":"Estou com febre há 3 dias.","symptoms":["fever"],"severity":"unknown","duration_minutes":4320,"age":null}
+{"case_id":"f05","report":"Tenho 35 anos e estou com dor abdominal forte.","symptoms":["abdominal_pain"],"severity":"severe","duration_minutes":null,"age":35}
+{"case_id":"f06","report":"Estou com tontura e náusea, mas não vomitei.","symptoms":["dizziness"],"severity":"unknown","duration_minutes":null,"age":null}
+{"case_id":"f07","report":"Não tenho febre nem tosse. Só dor nas costas.","symptoms":["back_pain"],"severity":"unknown","duration_minutes":null,"age":null}
+{"case_id":"f08","report":"Estou com falta de ar intensa e dor no peito.","symptoms":["shortness_of_breath","chest_pain"],"severity":"severe","duration_minutes":null,"age":null}
+{"case_id":"f09","report":"Tive uma convulsão agora há pouco.","symptoms":["seizure"],"severity":"unknown","duration_minutes":null,"age":null}
+{"case_id":"f10","report":"Estou com manchas na pele e coceira.","symptoms":["rash"],"severity":"unknown","duration_minutes":null,"age":null}
+{"case_id":"f11","report":"Estou vomitando há duas horas.","symptoms":["vomiting"],"severity":"unknown","duration_minutes":120,"age":null}
+{"case_id":"f12","report":"Tenho 70 anos, cansaço e diarreia desde ontem.","symptoms":["fatigue","diarrhea"],"severity":"unknown","duration_minutes":null,"age":70}
