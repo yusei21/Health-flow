@@ -108,7 +108,7 @@ class ActionExecutor:
 
     async def _load_patient_context(self, state: HarnessState) -> None:
         state.patient_context = await self._context.build_context(
-            state.user_id, state.extracted_symptoms
+            state.user_id, state.extracted_symptoms, authorized=state.use_patient_record
         )
 
     async def _run_safety_assessment(self, state: HarnessState) -> None:

@@ -44,6 +44,7 @@ class HarnessState(BaseModel):
     latitude: float
     longitude: float
     intent: Intent = Intent.CARE_ROUTING
+    use_patient_record: bool = False
 
     safety_precheck: SafetyAssessment | None = None  # raw text only, before any LLM call
     extracted_symptoms: SymptomExtraction | None = None

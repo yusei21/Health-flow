@@ -129,3 +129,11 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
   .card { padding: 16px; }
   .location .button, .button.primary { width: 100%; }
 }
+
+h2 { font-size: 1.15rem; margin: 20px 0 12px; }
+.access, .sus-questions { border-top: 1px solid var(--border); padding: 8px 0 20px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.record, .audio { padding: 16px; margin: 16px 0; border: 1px solid var(--border); border-radius: 8px; }
+.audio { display: grid; gap: 12px; }
+input:not([type=checkbox]), select { width: 100%; padding: 10px; font: inherit; border: 1px solid var(--border); border-radius: 6px; }
+.emergency-notice { background: var(--danger-bg); padding: 12px; border-radius: 8px; }

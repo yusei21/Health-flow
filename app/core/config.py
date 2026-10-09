@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     demo_auth_token: SecretStr | None = None
     demo_user_id: UUID | None = None
 
+    transcription_url: str | None = None
+    transcription_api_key: SecretStr | None = None
+    transcription_model: str = "whisper-1"
+
     # Browser origins allowed to call the API (e.g. the Vite dev server). Empty = CORS off.
     cors_allowed_origins: list[str] = Field(default_factory=list)
 

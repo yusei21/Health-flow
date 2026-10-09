@@ -7,6 +7,7 @@ export interface RoutingRequest {
   message: string;
   latitude: number;
   longitude: number;
+  use_patient_record?: boolean;
 }
 
 export interface FacilityResponse {

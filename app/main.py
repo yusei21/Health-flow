@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.dependencies.container import Container, build_container
 from app.api.errors import register_error_handlers
 from app.api.middleware import RequestIdMiddleware
-from app.api.routes import health, patients, routing
+from app.api.routes import access, audio, health, patients, routing, sus
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 
@@ -38,7 +38,11 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
             expose_headers=["X-Request-ID"],
         )
+    app.state.settings = resolved
     register_error_handlers(app)
+    app.include_router(access.router, prefix="/api/v1")
+    app.include_router(audio.router, prefix="/api/v1")
+    app.include_router(sus.router, prefix="/api/v1")
     app.include_router(health.router)
     app.include_router(routing.router, prefix="/api/v1")
     app.include_router(patients.router, prefix="/api/v1")

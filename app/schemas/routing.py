@@ -28,6 +28,7 @@ class RoutingRequest(BaseModel):
     message: str = Field(min_length=3, max_length=2000)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
+    use_patient_record: bool = False
 
 
 class FacilityResponse(BaseModel):
@@ -50,5 +51,7 @@ class RoutingResponse(BaseModel):
     reason_codes: list[str]
     safety_override: bool
     disclaimer: str
+    sus_context_version: str = "2026-10-09"
+    patient_record_authorized: bool = False
     needs_more_information: bool = False
     follow_up_questions: list[str] = Field(default_factory=list)

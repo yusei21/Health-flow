@@ -103,7 +103,7 @@ def test_routing_requires_authentication(client: TestClient, headers: dict[str, 
 
 
 def test_patients_me_returns_only_own_record(client: TestClient) -> None:
-    response = client.get("/api/v1/patients/me", headers=AUTH)
+    response = client.get("/api/v1/patients/me?consent=true", headers=AUTH)
     assert response.status_code == 200
     assert response.json()["user_id"] == str(DEMO_USER_ID)
     assert client.get("/api/v1/patients/me").status_code == 401

@@ -1,6 +1,7 @@
 from app.harness.actions import HarnessAction
 from app.harness.follow_up import follow_up_questions
 from app.harness.state import HarnessState
+from app.harness.sus_context import NEXT_STEP, SUS_CONTEXT_VERSION
 from app.schemas.care import CareLevel
 from app.schemas.routing import FacilityResponse, RoutingResponse
 
@@ -12,11 +13,6 @@ EMERGENCY_GUIDANCE = (
     "Possível situação de emergência. Ligue imediatamente para o SAMU 192. "
     "Este sistema NÃO aciona ambulância automaticamente."
 )
-_NEXT_STEP = {
-    CareLevel.PRIMARY_CARE: "Procure uma Unidade Básica de Saúde (UBS) para avaliação.",
-    CareLevel.URGENT_CARE: "Procure atendimento de urgência (UPA) o quanto antes.",
-    CareLevel.EMERGENCY: "Ligue 192 (SAMU) ou dirija-se imediatamente a um pronto-socorro.",
-}
 _NO_FACILITY = " Nenhuma unidade compatível foi encontrada perto da localização informada."
 
 
@@ -67,7 +63,7 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
             "Se houver sinais de risco imediato, acione o SAMU 192. "
             "Caso contrário, procure avaliação profissional conforme os sintomas."
             if uncertain
-            else _NEXT_STEP[decision.care_level]
+            else NEXT_STEP[decision.care_level]
         )
         + ("" if facility else no_facility_note),
         emergency_guidance=EMERGENCY_GUIDANCE if is_emergency else None,
@@ -76,4 +72,6 @@ def build_routing_response(state: HarnessState) -> RoutingResponse:
         disclaimer=DISCLAIMER,
         needs_more_information=uncertain,
         follow_up_questions=questions,
+        sus_context_version=SUS_CONTEXT_VERSION,
+        patient_record_authorized=state.use_patient_record,
     )

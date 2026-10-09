@@ -18,5 +18,6 @@ async def route_care(
         message=body.message,
         latitude=body.latitude,
         longitude=body.longitude,
+        use_patient_record=body.use_patient_record,
     )
     return build_routing_response(state)
