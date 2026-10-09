@@ -48,7 +48,14 @@ class AutonomousHealthFlowHarness:
         self._policy = policy or HarnessPolicy()
 
     async def run(
-        self, request_id: str, user_id: UUID, message: str, latitude: float, longitude: float
+        self,
+        request_id: str,
+        user_id: UUID,
+        message: str,
+        latitude: float,
+        longitude: float,
+        *,
+        use_patient_record: bool = False,
     ) -> HarnessState:
         state = HarnessState(
             request_id=request_id,
@@ -56,6 +63,7 @@ class AutonomousHealthFlowHarness:
             user_message=message,
             latitude=latitude,
             longitude=longitude,
+            use_patient_record=use_patient_record,
         )
         deadline = asyncio.timeout(self._policy.limits.timeout_seconds)
         try:

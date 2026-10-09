@@ -93,7 +93,7 @@ async def harness_trial(failure: str) -> dict[str, object]:
         planner=InvalidPlanner() if failure == "policy" else None,
     )
     try:
-        state = await runner.run("injected", USER, MESSAGE, -23.55, -46.64)
+        state = await runner.run("injected", USER, MESSAGE, -23.55, -46.64, use_patient_record=True)
     except (FacilityProviderError, HarnessError, LLMUnavailableError, MLInferenceError) as exc:
         return {"status": "raised", "error_type": type(exc).__name__, "decision": None}
     return {
@@ -114,7 +114,7 @@ async def direct_trial(failure: str) -> dict[str, object]:
         if failure == "policy":
             return {"status": "not_applicable", "decision": None}
         extraction = await intent.extract(MESSAGE)
-        context = await context_agent.build_context(USER, extraction)
+        context = await context_agent.build_context(USER, extraction, authorized=True)
         full = safety.assess(MESSAGE, extraction, context)
         prediction = inference.predict(extraction, context) if not full.has_red_flag else None
         routing = CareRoutingAgent(low_confidence_threshold=0.55).decide(full, prediction)

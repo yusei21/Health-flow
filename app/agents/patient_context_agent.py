@@ -15,8 +15,10 @@ class PatientContextAgent:
         self._builder = builder
 
     async def build_context(
-        self, user_id: UUID, extraction: SymptomExtraction | None
+        self, user_id: UUID, extraction: SymptomExtraction | None, *, authorized: bool = False
     ) -> PatientContext:
+        if not authorized:
+            return self._builder.build(None, extraction)
         try:
             record = await self._repository.get_by_user_id(user_id)
         except PatientNotFoundError:

@@ -96,7 +96,9 @@ def main() -> None:
     if args.output.resolve() == args.cases.resolve():
         parser.error("Input and output must differ")
     report = analyze(load_cases(args.cases), RoutingClassifier.load(args.model_dir))
-    args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     sys.stdout.write(
         f"context features changed: {report['feature_vectors_changed']}; "
         f"probabilities changed: {report['probability_vectors_changed']}; "

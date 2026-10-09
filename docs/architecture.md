@@ -1,3 +1,10 @@
+# Atualização do fluxo de entrada
+
+A jornada atual está descrita em [SUS_CONTEXT.md](SUS_CONTEXT.md) e
+[INTEGRATIONS.md](INTEGRATIONS.md): consulta de prontuário exige consentimento,
+fonte CNES deve ser configurada e não há fallback OSM como atendimento SUS confirmado.
+As fases históricas abaixo permanecem como referência de implementação acadêmica.
+
 # Arquitetura — Health-flow
 
 > **PROTÓTIPO ACADÊMICO — NÃO UTILIZAR PARA DECISÕES CLÍNICAS REAIS.**

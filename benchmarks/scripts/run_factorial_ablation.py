@@ -51,9 +51,9 @@ class FrozenContext(PatientContextAgent):
         self.builder = PatientContextBuilder()
 
     async def build_context(
-        self, user_id: UUID, extraction: SymptomExtraction | None
+        self, user_id: UUID, extraction: SymptomExtraction | None, *, authorized: bool = False
     ) -> PatientContext:
-        return self.builder.build(self.record, extraction)
+        return self.builder.build(self.record if authorized else None, extraction)
 
 
 class RuleBaseline(RoutingInferenceService):
@@ -92,7 +92,7 @@ async def direct_pipeline(
     prediction = None
     if not precheck.has_red_flag:
         llm_calls = 1  # frozen extraction: logical call only, not actual LLM invocation
-        patient_context = await context.build_context(user_id, extraction)
+        patient_context = await context.build_context(user_id, extraction, authorized=True)
         tool_calls += 1
         full = safety_engine.assess(message, extraction, patient_context)
         assessment = combine_assessments(precheck, full)
@@ -141,7 +141,9 @@ async def run_case(
             routing_agent=CareRoutingAgent(low_confidence_threshold=0.55),
             navigation_agent=NavigationAgent(MockFacilityProvider([]), 25),
         )
-        state = await runner.run(str(case["case_id"]), user_id, message, -23.55, -46.64)
+        state = await runner.run(
+            str(case["case_id"]), user_id, message, -23.55, -46.64, use_patient_record=True
+        )
         if state.routing_decision is None:
             raise ValueError("Harness produced no routing decision")
         level = state.routing_decision.care_level

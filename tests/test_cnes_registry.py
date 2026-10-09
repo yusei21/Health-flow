@@ -126,3 +126,22 @@ async def test_official_zip_header_latin1_and_short_cnes(tmp_path: Path) -> None
         import_cnes_csv(
             source, database, OFFICIAL_CNES_COLUMNS, date(2026, 10, 7), SOURCE, encoding="latin-1"
         )
+
+
+@pytest.mark.anyio
+async def test_nearest_compatible_sus_unit_excludes_closer_wrong_service(tmp_path: Path) -> None:
+    source = tmp_path / "cnes.csv"
+    database = tmp_path / "facilities.sqlite"
+    write_csv(
+        source,
+        [
+            row("1111111", "02", "SIM", "-23.55"),
+            row("2222222", "73", "SIM", "-23.56"),
+            row("3333333", "73", "SIM", "-23.60"),
+            row("4444444", "73", "N", "-23.55"),
+        ],
+    )
+    import_cnes_csv(source, database, COLUMNS, date(2026, 10, 7), SOURCE)
+    matches = await CNESFacilityProvider(database).find_nearby(ServiceType.UPA, -23.55, -46.63, 25)
+    assert [item.facility.id for item in matches] == ["cnes-2222222", "cnes-3333333"]
+    assert matches[0].distance_km < matches[1].distance_km

@@ -35,3 +35,10 @@ data/processed/*
 .idea/
 .vscode/
 .DS_Store
+
+# Local benchmark output; existing published aggregates remain tracked.
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+
+# Test temporary directories when TMPDIR is within the checkout.
+pytest-of-root/

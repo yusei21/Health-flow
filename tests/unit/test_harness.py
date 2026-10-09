@@ -96,7 +96,7 @@ class FailingFacilities:
 
 
 async def run(harness: AutonomousHealthFlowHarness, message: str = "relato") -> HarnessState:
-    return await harness.run("req-1", DEMO_USER_ID, message, *SAO_PAULO)
+    return await harness.run("req-1", DEMO_USER_ID, message, *SAO_PAULO, use_patient_record=True)
 
 
 def spied_state(planner: SpyPlanner) -> HarnessState:
